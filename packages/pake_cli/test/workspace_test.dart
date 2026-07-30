@@ -26,29 +26,32 @@ void main() {
     expect(ws.outDirFor('Wei/Bo:2'), endsWith('/out/wei-bo-2'));
   });
 
-  test('withLock runs the action and releases the lock afterwards', () {
-    final result = ws.withLock(() => 'done');
+  test('withLock runs the action and releases the lock afterwards', () async {
+    final result = await ws.withLock(() async => 'done');
 
     expect(result, 'done');
     expect(
-      ws.withLock(() => 'again'),
+      await ws.withLock(() async => 'again'),
       'again',
       reason: 'a released lock must be re-acquirable',
     );
   });
 
-  test('withLock releases the lock even when the action throws', () {
-    expect(() => ws.withLock(() => throw StateError('boom')), throwsStateError);
+  test('withLock releases the lock even when the action throws', () async {
+    await expectLater(
+      () => ws.withLock(() async => throw StateError('boom')),
+      throwsStateError,
+    );
 
-    expect(ws.withLock(() => 'recovered'), 'recovered');
+    expect(await ws.withLock(() async => 'recovered'), 'recovered');
   });
 
-  test('a second holder fails immediately instead of queueing', () {
+  test('a second holder fails immediately instead of queueing', () async {
     ws.ensureDirs();
     File(ws.lockPath).writeAsStringSync('99999');
 
-    expect(
-      () => ws.withLock(() => 'never'),
+    await expectLater(
+      () => ws.withLock(() async => 'never'),
       throwsA(
         isA<PakeException>().having(
           (e) => e.exitCode,
@@ -56,6 +59,34 @@ void main() {
           ExitCodes.environment,
         ),
       ),
+    );
+  });
+
+  test('the lock is held for the full duration of an async action', () async {
+    final future = ws.withLock(() async {
+      // 锁必须在这个 await 期间还在——回归会在 Future 创建时就放锁。
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(
+        File(ws.lockPath).existsSync(),
+        isTrue,
+        reason: 'lock must still be held mid-action, after an await',
+      );
+      return 'done';
+    });
+
+    expect(
+      File(ws.lockPath).existsSync(),
+      isTrue,
+      reason: 'lock must be held immediately after withLock is called',
+    );
+
+    final result = await future;
+
+    expect(result, 'done');
+    expect(
+      File(ws.lockPath).existsSync(),
+      isFalse,
+      reason: 'lock must be released once the action future completes',
     );
   });
 }

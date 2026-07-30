@@ -43,7 +43,10 @@ class Workspace {
   ///
   /// 第二个进程**直接报错退出，不排队**——排队会让 `--json` 的 agent 调用
   /// 静默超时，报错更诚实。
-  T withLock<T>(T Function() action) {
+  ///
+  /// 异步：`action` 是构建流水线，必须在锁释放前 `await` 完——否则
+  /// `finally` 会在 Future 一创建就跑，锁在构建还没完工时就没了。
+  Future<T> withLock<T>(Future<T> Function() action) async {
     ensureDirs();
     final lock = File(lockPath);
 
@@ -58,7 +61,7 @@ class Workspace {
 
     lock.writeAsStringSync('$pid');
     try {
-      return action();
+      return await action();
     } finally {
       if (lock.existsSync()) lock.deleteSync();
     }
