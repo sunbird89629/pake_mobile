@@ -3,3 +3,4 @@ library;
 
 export 'src/config.dart';
 export 'src/permission.dart';
+export 'src/validation.dart';
