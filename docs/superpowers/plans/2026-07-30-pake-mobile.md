@@ -27,7 +27,7 @@ spec: ../specs/2026-07-30-pake-mobile-design.md
 - 配置查找顺序不叠加：`--config <path>` > 当前目录 `pake.json` > 无文件；CLI flag 始终覆盖文件同名字段。
 - 运行期配置只用 `get_storage` 默认容器（`GetStorage()`），因为 `debug_sheet` 内部就写死了默认容器。
 - 所有物化逻辑必须是**纯字符串函数**（`String patchX(String original, PakeConfig c)`），以便 golden test 秒级跑完、不碰真实 workspace。
-- 长字符串一律用反引号模板字符串（Dart 中即 `'''` 原始多行字符串），不用 `+` 拼接。
+- 长字符串一律用 Dart 的 `'''` 多行字符串字面量，不用 `+` 拼接跨行。
 
 ## 探查结论（已解掉 spec 的两条未决事项）
 
