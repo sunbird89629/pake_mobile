@@ -1,11 +1,21 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:pake_cli/src/patch/android.dart';
 import 'package:pake_config/pake_config.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+// `dart test` runs suites concurrently in one process, and
+// `Directory.current` is a process-wide OS property — a relative path here
+// would transiently resolve against whatever cwd another suite (e.g.
+// runner_test.dart, which chdirs for its own tests) happens to have set.
+// Resolving the fixtures directory via the package config instead sidesteps
+// `Directory.current` entirely.
+late final String _fixturesDir;
+
 String _fixture(String name) =>
-    File('test/patch/fixtures/$name').readAsStringSync();
+    File(p.join(_fixturesDir, name)).readAsStringSync();
 
 const _config = PakeConfig(
   name: 'Weibo',
@@ -17,6 +27,15 @@ const _config = PakeConfig(
 );
 
 void main() {
+  setUpAll(() async {
+    final libUri = await Isolate.resolvePackageUri(
+      Uri.parse('package:pake_cli/'),
+    );
+    _fixturesDir = p.normalize(
+      p.join(libUri!.toFilePath(), '..', 'test', 'patch', 'fixtures'),
+    );
+  });
+
   group('patchBuildGradle', () {
     test('rewrites applicationId, namespace and version', () {
       final out = patchBuildGradle(_fixture('build.gradle.kts.in'), _config);
