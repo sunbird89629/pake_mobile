@@ -34,12 +34,21 @@ String patchAndroidManifest(String original, PakeConfig config) {
     'android:label="${_escapeXmlAttribute(config.name)}"',
   );
 
-  final block = [
-    _permsBegin,
-    for (final p in config.permissions)
-      '    <uses-permission android:name="${p.androidPermission}"/>',
-    _permsEnd,
-  ].join('\n');
+  // INTERNET is never optional for a webview shell — always include it as the
+  // first permission. Then add declared permissions, filtering out INTERNET
+  // to avoid duplicates.
+  final permissions = <String>[
+    '    <uses-permission android:name="android.permission.INTERNET"/>',
+  ];
+  for (final p in config.permissions) {
+    if (p.androidPermission != 'android.permission.INTERNET') {
+      permissions.add(
+        '    <uses-permission android:name="${p.androidPermission}"/>',
+      );
+    }
+  }
+
+  final block = [_permsBegin, ...permissions, _permsEnd].join('\n');
 
   final existing = RegExp(
     '${RegExp.escape(_permsBegin)}.*?${RegExp.escape(_permsEnd)}',

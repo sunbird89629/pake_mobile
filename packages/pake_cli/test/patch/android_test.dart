@@ -64,13 +64,14 @@ void main() {
       expect(out, isNot(contains('ACCESS_FINE_LOCATION')));
     });
 
-    test('keeps INTERNET, which is never optional for a webview shell', () {
+    test('adds INTERNET, which is never optional for a webview shell', () {
       final out = patchAndroidManifest(
         _fixture('AndroidManifest.xml.in'),
         _config.copyWith(permissions: []),
       );
 
       expect(out, contains('android.permission.INTERNET'));
+      expect('android.permission.INTERNET'.allMatches(out).length, 1);
     });
 
     test('does not duplicate permissions on a second patch', () {
