@@ -876,7 +876,8 @@ git commit -m "feat(config): add flag merge precedence and shared runtime keys"
 - Produces:
   - `class PakeException implements Exception { PakeException(this.exitCode, this.message, {this.details}); final int exitCode; final String message; final List<ConfigError> details; }`
   - `abstract final class ExitCodes { static const config = 1; static const environment = 2; static const build = 3; }`
-  - `class Output { Output({required this.json, IOSink? sink}); void info(String line); void success(Map<String, Object?> payload); void failure(PakeException e); }`
+  - `class Output { Output({required this.json, StringSink? sink}); void info(String line); void success(Map<String, Object?> payload); void failure(PakeException e); }`
+  - `CommandRunner<int> buildRunner(Output output)` 必须在**顶层 runner 的 argParser** 上注册 `--json`。`bin/pakem.dart` 用 `args.contains('--json')` 在解析前决定输出模式，但 args 包会拒绝未声明的 token——不注册则 `pakem init --json` 直接抛 `UsageException`。
   - `CommandRunner<int> buildRunner()`（后续任务往里 `addCommand`）
 
 **设计要点：** `Output` 是**唯一**的写终端出口。人类模式下 `info` 逐行打印、`success` 打印友好摘要；`--json` 模式下 `info` 全部丢弃（否则污染 JSON），只在最后吐一个 JSON 对象。这样「`--json` 输出单个 JSON 对象」的契约由类型系统保证，而不是靠每个命令自觉。
@@ -1467,9 +1468,10 @@ android {
             android:windowSoftInputMode="adjustResize">
         </activity>
     </application>
-    <uses-permission android:name="android.permission.INTERNET"/>
 </manifest>
 ```
+
+> **注意 fixture 的保真度**：真实 `flutter create` 产出的 `android/app/src/main/AndroidManifest.xml` **一条 `<uses-permission>` 都没有**。`INTERNET` 只出现在 `android/app/src/debug/AndroidManifest.xml`（Flutter 为 hot-reload 注入），release 构建不读那个文件。因此 `patchAndroidManifest` 必须**无条件添加** INTERNET，而不是「保留已有的」——后者会产出一个完全没有网络权限的 webview 壳。
 
 - [ ] **Step 2: 写失败的测试**
 
@@ -1538,13 +1540,16 @@ void main() {
       expect(out, isNot(contains('ACCESS_FINE_LOCATION')));
     });
 
-    test('keeps INTERNET, which is never optional for a webview shell', () {
+    test('adds INTERNET even when the source manifest declares none', () {
+      // 真实 flutter create 的 main manifest 没有任何 uses-permission，
+      // 所以「保留已有的」不够——必须无条件添加。
       final out = patchAndroidManifest(
         _fixture('AndroidManifest.xml.in'),
         _config.copyWith(permissions: []),
       );
 
       expect(out, contains('android.permission.INTERNET'));
+      expect('android.permission.INTERNET'.allMatches(out).length, 1);
     });
 
     test('does not duplicate permissions on a second patch', () {
@@ -1624,10 +1629,17 @@ String patchAndroidManifest(String original, PakeConfig config) {
     'android:label="${_escapeXmlAttribute(config.name)}"',
   );
 
+  // INTERNET 无条件加：真实模板里根本没有它，而没有网络权限的
+  // webview 壳是废的。去重以防调用方也在 permissions 里列了它。
+  const internet = 'android.permission.INTERNET';
+  final names = <String>{
+    internet,
+    for (final p in config.permissions) p.androidPermission,
+  };
+
   final block = [
     _permsBegin,
-    for (final p in config.permissions)
-      '    <uses-permission android:name="${p.androidPermission}"/>',
+    for (final name in names) '    <uses-permission android:name="$name"/>',
     _permsEnd,
   ].join('\n');
 
@@ -1840,11 +1852,13 @@ const _permsEnd = '\t<!-- pake:permissions:end -->';
 /// 版本号**不动**——它由 `flutter build --build-name/--build-number` 经
 /// `$(FLUTTER_BUILD_NAME)` 变量注入，直接改 plist 会和工具链打架。
 String patchInfoPlist(String original, PakeConfig config) {
-  var out = original.replaceFirst(
+  // 必须用 replaceFirstMapped：Dart 的 replaceFirst 把 replacement 当字面量，
+  // 不解析 $1 / ${1} 这类反向引用（那是 JS 的语义）。
+  var out = original.replaceFirstMapped(
     RegExp(
       r'(<key>CFBundleDisplayName</key>\s*\n\s*<string>)[^<]*(</string>)',
     ),
-    '\${1}${_escapeXmlText(config.name)}\${2}',
+    (m) => '${m[1]}${_escapeXmlText(config.name)}${m[2]}',
   );
 
   final block = [
