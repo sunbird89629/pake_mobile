@@ -1,0 +1,193 @@
+import 'dart:io';
+
+import 'package:pake_cli/src/build_pipeline.dart';
+import 'package:pake_cli/src/output.dart';
+import 'package:pake_cli/src/process_runner.dart';
+import 'package:pake_cli/src/workspace.dart';
+import 'package:pake_config/pake_config.dart';
+import 'package:test/test.dart';
+
+class _FakeRunner implements ProcessRunner {
+  _FakeRunner({this.exitCode = 0});
+
+  final int exitCode;
+  final calls = <List<String>>[];
+
+  @override
+  Future<ProcessResult> run(
+    String executable,
+    List<String> args, {
+    String? workingDirectory,
+  }) async {
+    calls.add([executable, ...args]);
+    return ProcessResult(0, exitCode, 'stdout', 'stderr');
+  }
+}
+
+const _config = PakeConfig(
+  name: 'Weibo',
+  url: 'https://m.weibo.cn',
+  bundleId: 'com.pake.weibo',
+  version: '2.1.0',
+  buildNumber: 42,
+);
+
+void main() {
+  group('loadConfigJson', () {
+    late Directory tmp;
+    setUp(() => tmp = Directory.systemTemp.createTempSync('pakem_cfg'));
+    tearDown(() => tmp.deleteSync(recursive: true));
+
+    test('prefers an explicit --config path over the cwd file', () {
+      File('${tmp.path}/pake.json').writeAsStringSync('{"name":"cwd"}');
+      File('${tmp.path}/other.json').writeAsStringSync('{"name":"explicit"}');
+
+      final json = loadConfigJson(
+        explicitPath: '${tmp.path}/other.json',
+        cwd: tmp.path,
+      );
+
+      expect(json['name'], 'explicit');
+    });
+
+    test('falls back to pake.json in the cwd', () {
+      File('${tmp.path}/pake.json').writeAsStringSync('{"name":"cwd"}');
+
+      expect(loadConfigJson(cwd: tmp.path)['name'], 'cwd');
+    });
+
+    test('returns empty when no config file exists', () {
+      expect(loadConfigJson(cwd: tmp.path), isEmpty);
+    });
+
+    test('errors with exit code 1 when --config points at a missing file', () {
+      expect(
+        () => loadConfigJson(
+          explicitPath: '${tmp.path}/nope.json',
+          cwd: tmp.path,
+        ),
+        throwsA(
+          isA<PakeException>().having(
+            (e) => e.exitCode,
+            'exitCode',
+            ExitCodes.config,
+          ),
+        ),
+      );
+    });
+
+    test('errors with exit code 1 on malformed json', () {
+      File('${tmp.path}/pake.json').writeAsStringSync('{not json');
+
+      expect(
+        () => loadConfigJson(cwd: tmp.path),
+        throwsA(
+          isA<PakeException>().having(
+            (e) => e.exitCode,
+            'exitCode',
+            ExitCodes.config,
+          ),
+        ),
+      );
+    });
+  });
+
+  group('flutterBuildArgs', () {
+    test('android splits per abi and passes version through', () {
+      final args = flutterBuildArgs(PakePlatform.android, _config);
+
+      expect(args, containsAllInOrder(['build', 'apk']));
+      expect(args, contains('--release'));
+      expect(args, contains('--split-per-abi'));
+      expect(args, contains('--build-name=2.1.0'));
+      expect(args, contains('--build-number=42'));
+    });
+
+    test('ios passes the export options plist', () {
+      final args = flutterBuildArgs(
+        PakePlatform.ios,
+        _config,
+        exportOptionsPath: '/tmp/ExportOptions.plist',
+      );
+
+      expect(args, containsAllInOrder(['build', 'ipa']));
+      expect(args, contains('--export-options-plist=/tmp/ExportOptions.plist'));
+      expect(args, isNot(contains('--split-per-abi')));
+    });
+  });
+
+  group('runBuild', () {
+    late Directory tmp;
+    late Workspace ws;
+
+    setUp(() {
+      tmp = Directory.systemTemp.createTempSync('pakem_build');
+      ws = Workspace(root: tmp.path)..ensureDirs();
+    });
+    tearDown(() => tmp.deleteSync(recursive: true));
+
+    test('invokes flutter build once per requested platform', () async {
+      final runner = _FakeRunner();
+
+      await runBuild(
+        config: _config,
+        platforms: [PakePlatform.android],
+        workspace: ws,
+        runner: runner,
+        output: Output(json: true, sink: StringBuffer()),
+      );
+
+      expect(runner.calls.length, 1);
+      expect(runner.calls.single.first, 'flutter');
+      expect(runner.calls.single, contains('apk'));
+    });
+
+    test('throws exit code 3 when flutter build fails', () async {
+      final runner = _FakeRunner(exitCode: 1);
+
+      expect(
+        () => runBuild(
+          config: _config,
+          platforms: [PakePlatform.android],
+          workspace: ws,
+          runner: runner,
+          output: Output(json: true, sink: StringBuffer()),
+        ),
+        throwsA(
+          isA<PakeException>().having(
+            (e) => e.exitCode,
+            'exitCode',
+            ExitCodes.build,
+          ),
+        ),
+      );
+    });
+
+    test(
+      'writes the full build log to the workspace logs dir on failure',
+      () async {
+        final runner = _FakeRunner(exitCode: 1);
+
+        try {
+          await runBuild(
+            config: _config,
+            platforms: [PakePlatform.android],
+            workspace: ws,
+            runner: runner,
+            output: Output(json: true, sink: StringBuffer()),
+          );
+        } on PakeException catch (e) {
+          expect(
+            e.message,
+            contains(ws.logsDir),
+            reason: 'the terminal must point at the log, per spec',
+          );
+        }
+
+        final logs = Directory(ws.logsDir).listSync();
+        expect(logs, isNotEmpty);
+        expect(File(logs.first.path).readAsStringSync(), contains('stderr'));
+      },
+    );
+  });
+}
