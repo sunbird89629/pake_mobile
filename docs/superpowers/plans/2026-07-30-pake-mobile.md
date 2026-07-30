@@ -1708,11 +1708,30 @@ git commit -m "feat(cli): materialize android gradle and manifest as pure functi
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 </dict>
 </plist>
 ```
+
+> **fixture 必须保留这段嵌套**。真实 `flutter create --platforms=ios` 产出的 `Info.plist` 里，`UIApplicationSceneManifest` 有三层嵌套 dict，**文件中第一个 `</dict>` 是最内层的 scene 配置项，不是根节点**。扁平化的 fixture 会让 `replaceFirst('</dict>', ...)` 这类实现测试全绿却在真机上把权限声明埋进嵌套字典——iOS 读不到，请求权限即崩溃。
 
 - [ ] **Step 2: 写失败的测试**
 
@@ -1761,6 +1780,20 @@ void main() {
 
       expect(out, contains('<key>NSLocationWhenInUseUsageDescription</key>'));
       expect(out, isNot(contains('NSCameraUsageDescription')));
+    });
+
+    test('inserts at the ROOT dict, not the first nested one', () {
+      // 真实 Info.plist 里第一个 </dict> 属于 UIApplicationSceneManifest
+      // 内层的 scene 配置项。插错位置 iOS 读不到 usage description，
+      // 请求权限时直接崩——而且扁平 fixture 完全测不出来。
+      final out = patchInfoPlist(_fixture('Info.plist.in'), _config);
+
+      final keyAt = out.indexOf('NSLocationWhenInUseUsageDescription');
+      final sceneManifestEnd =
+          out.indexOf('</dict>', out.indexOf('UISceneClassName'));
+
+      expect(keyAt, greaterThan(sceneManifestEnd),
+          reason: 'usage description must sit outside the scene manifest');
     });
 
     test('is idempotent', () {
@@ -1879,7 +1912,12 @@ String patchInfoPlist(String original, PakeConfig config) {
     return out.replaceFirst(existing, block);
   }
 
-  return out.replaceFirst('</dict>', '$block\n</dict>');
+  // 必须锚到**根** dict 的闭合标签。真实 Info.plist 里
+  // UIApplicationSceneManifest 有三层嵌套 dict，文件中第一个 </dict>
+  // 是最内层的 scene 配置项——插到那里 iOS 读不到 usage description，
+  // 请求对应权限时直接崩溃。根 dict 永远是紧挨 </plist> 的那个。
+  final rootClose = out.lastIndexOf('</dict>');
+  return '${out.substring(0, rootClose)}$block\n${out.substring(rootClose)}';
 }
 
 /// 改 `ios/Runner.xcodeproj/project.pbxproj` 里的 bundle id。

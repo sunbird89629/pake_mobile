@@ -17,6 +17,20 @@ const _config = PakeConfig(
 );
 
 void main() {
+  late Directory originalDir;
+
+  setUp(() {
+    originalDir = Directory.current;
+  });
+
+  tearDown(() {
+    try {
+      Directory.current = originalDir;
+    } catch (e) {
+      // ignore failures in teardown
+    }
+  });
+
   group('patchInfoPlist', () {
     test('rewrites the display name', () {
       final out = patchInfoPlist(_fixture('Info.plist.in'), _config);
@@ -70,30 +84,24 @@ void main() {
       expect(out, contains('<string>Tom &amp; Jerry</string>'));
     });
 
-    test(
-      'inserts the permission block at the root dict, not in nested dicts',
-      () {
-        // Permissions must be at root level — iOS ignores them if nested.
-        // Fixture has UIApplicationSceneManifest with nested dicts.
-        final out = patchInfoPlist(_fixture('Info.plist.in'), _config);
+    test('inserts at the ROOT dict, not the first nested one', () {
+      // Permissions must be at root level — iOS ignores them if nested.
+      // Fixture has UIApplicationSceneManifest with nested dicts;
+      // replaceFirst('</dict>') lands the key in that struct, causing device crash.
+      final out = patchInfoPlist(_fixture('Info.plist.in'), _config);
 
-        // Find the index of the usage-description key (which is in the permission block)
-        final permKeyIndex = out.indexOf(
-          '<key>NSLocationWhenInUseUsageDescription</key>',
-        );
-        // Find the index of the innermost nested dict's closing tag
-        final innermostCloseIndex = out.indexOf(
-          '</dict>\n\t</dict>\n\t</dict>\n',
-        );
+      final keyAt = out.indexOf('NSLocationWhenInUseUsageDescription');
+      final sceneManifestEnd = out.indexOf(
+        '</dict>',
+        out.indexOf('UISceneClassName'),
+      );
 
-        expect(
-          permKeyIndex,
-          greaterThan(innermostCloseIndex),
-          reason:
-              'permission block must be after all nested dicts, at root level',
-        );
-      },
-    );
+      expect(
+        keyAt,
+        greaterThan(sceneManifestEnd),
+        reason: 'usage description must sit outside the scene manifest',
+      );
+    });
   });
 
   group('patchPbxproj', () {
