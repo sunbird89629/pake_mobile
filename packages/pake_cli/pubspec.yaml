@@ -1,0 +1,22 @@
+name: pake_cli
+description: pakem — build any web page into an Android APK or iOS IPA.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.8.0
+
+executables:
+  pakem: pakem
+
+dependencies:
+  args: ^2.5.0
+  path: ^1.9.0
+  pake_config:
+    path: ../pake_config
+  logger_utils:
+    git:
+      url: https://github.com/sunbird89629/logger_utils.git
+
+dev_dependencies:
+  test: ^1.25.0
