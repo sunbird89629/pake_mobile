@@ -33,7 +33,12 @@ String patchInfoPlist(String original, PakeConfig config) {
     return out.replaceFirst(existing, block);
   }
 
-  return out.replaceFirst('</dict>', '$block\n</dict>');
+  // 权限块必须插入到根字典的闭合标签，不是任何嵌套字典的。
+  // 根字典的 </dict> 紧跟在 </plist> 前，所以 lastIndexOf 定位到它。
+  // replaceFirst 会错误地命中嵌套字典（如 UIApplicationSceneManifest 内的），
+  // 导致权限键被 iOS 忽略并在设备上崩溃。
+  final rootClose = out.lastIndexOf('</dict>');
+  return '${out.substring(0, rootClose)}$block\n${out.substring(rootClose)}';
 }
 
 /// 改 `ios/Runner.xcodeproj/project.pbxproj` 里的 bundle id。

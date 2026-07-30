@@ -69,6 +69,31 @@ void main() {
 
       expect(out, contains('<string>Tom &amp; Jerry</string>'));
     });
+
+    test(
+      'inserts the permission block at the root dict, not in nested dicts',
+      () {
+        // Permissions must be at root level — iOS ignores them if nested.
+        // Fixture has UIApplicationSceneManifest with nested dicts.
+        final out = patchInfoPlist(_fixture('Info.plist.in'), _config);
+
+        // Find the index of the usage-description key (which is in the permission block)
+        final permKeyIndex = out.indexOf(
+          '<key>NSLocationWhenInUseUsageDescription</key>',
+        );
+        // Find the index of the innermost nested dict's closing tag
+        final innermostCloseIndex = out.indexOf(
+          '</dict>\n\t</dict>\n\t</dict>\n',
+        );
+
+        expect(
+          permKeyIndex,
+          greaterThan(innermostCloseIndex),
+          reason:
+              'permission block must be after all nested dicts, at root level',
+        );
+      },
+    );
   });
 
   group('patchPbxproj', () {
