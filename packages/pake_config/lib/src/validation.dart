@@ -17,8 +17,9 @@ class ConfigError {
 
 /// Android applicationId / iOS bundle id 的交集规则：
 /// 至少两段，每段以字母开头，其余为字母数字下划线。
-final _bundleIdPattern =
-    RegExp(r'^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$');
+final _bundleIdPattern = RegExp(
+  r'^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$',
+);
 
 final _versionPattern = RegExp(r'^\d+\.\d+\.\d+$');
 
@@ -40,25 +41,31 @@ List<ConfigError> validateConfig(
   if (uri == null ||
       (uri.scheme != 'http' && uri.scheme != 'https') ||
       uri.host.isEmpty) {
-    errors.add(ConfigError(
-      'url',
-      'Must be an absolute http:// or https:// URL with a host, got "${config.url}".',
-    ));
+    errors.add(
+      ConfigError(
+        'url',
+        'Must be an absolute http:// or https:// URL with a host, got "${config.url}".',
+      ),
+    );
   }
 
   if (!_bundleIdPattern.hasMatch(config.bundleId)) {
-    errors.add(ConfigError(
-      'bundleId',
-      'Must be at least two dot-separated segments, each starting with a '
-          'letter (e.g. com.example.app), got "${config.bundleId}".',
-    ));
+    errors.add(
+      ConfigError(
+        'bundleId',
+        'Must be at least two dot-separated segments, each starting with a '
+            'letter (e.g. com.example.app), got "${config.bundleId}".',
+      ),
+    );
   }
 
   if (!_versionPattern.hasMatch(config.version)) {
-    errors.add(ConfigError(
-      'version',
-      'Must be x.y.z with numeric parts, got "${config.version}".',
-    ));
+    errors.add(
+      ConfigError(
+        'version',
+        'Must be x.y.z with numeric parts, got "${config.version}".',
+      ),
+    );
   }
 
   final icon = config.iconPath;

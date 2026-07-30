@@ -43,15 +43,15 @@ class PakeConfig {
   final List<PakePermission> permissions;
 
   Map<String, Object?> toJson() => {
-        'name': name,
-        'url': url,
-        'bundleId': bundleId,
-        'version': version,
-        'buildNumber': buildNumber,
-        if (iconPath != null) 'iconPath': iconPath,
-        'injectScripts': injectScripts,
-        'permissions': [for (final p in permissions) p.name],
-      };
+    'name': name,
+    'url': url,
+    'bundleId': bundleId,
+    'version': version,
+    'buildNumber': buildNumber,
+    if (iconPath != null) 'iconPath': iconPath,
+    'injectScripts': injectScripts,
+    'permissions': [for (final p in permissions) p.name],
+  };
 
   PakeConfig copyWith({
     String? name,
@@ -62,17 +62,16 @@ class PakeConfig {
     String? iconPath,
     List<String>? injectScripts,
     List<PakePermission>? permissions,
-  }) =>
-      PakeConfig(
-        name: name ?? this.name,
-        url: url ?? this.url,
-        bundleId: bundleId ?? this.bundleId,
-        version: version ?? this.version,
-        buildNumber: buildNumber ?? this.buildNumber,
-        iconPath: iconPath ?? this.iconPath,
-        injectScripts: injectScripts ?? this.injectScripts,
-        permissions: permissions ?? this.permissions,
-      );
+  }) => PakeConfig(
+    name: name ?? this.name,
+    url: url ?? this.url,
+    bundleId: bundleId ?? this.bundleId,
+    version: version ?? this.version,
+    buildNumber: buildNumber ?? this.buildNumber,
+    iconPath: iconPath ?? this.iconPath,
+    injectScripts: injectScripts ?? this.injectScripts,
+    permissions: permissions ?? this.permissions,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -88,15 +87,15 @@ class PakeConfig {
 
   @override
   int get hashCode => Object.hash(
-        name,
-        url,
-        bundleId,
-        version,
-        buildNumber,
-        iconPath,
-        Object.hashAll(injectScripts),
-        Object.hashAll(permissions),
-      );
+    name,
+    url,
+    bundleId,
+    version,
+    buildNumber,
+    iconPath,
+    Object.hashAll(injectScripts),
+    Object.hashAll(permissions),
+  );
 
   @override
   String toString() => 'PakeConfig($name, $bundleId, $url)';

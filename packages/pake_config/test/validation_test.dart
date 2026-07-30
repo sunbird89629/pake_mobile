@@ -8,15 +8,14 @@ PakeConfig _valid({
   String version = '1.0.0',
   String? iconPath,
   List<String> injectScripts = const [],
-}) =>
-    PakeConfig(
-      name: name,
-      url: url,
-      bundleId: bundleId,
-      version: version,
-      iconPath: iconPath,
-      injectScripts: injectScripts,
-    );
+}) => PakeConfig(
+  name: name,
+  url: url,
+  bundleId: bundleId,
+  version: version,
+  iconPath: iconPath,
+  injectScripts: injectScripts,
+);
 
 /// 除显式列出的路径外都不存在。
 bool Function(String) _fsWith(Set<String> present) => present.contains;
@@ -28,43 +27,70 @@ void main() {
     });
 
     test('rejects a blank name', () {
-      final errors = validateConfig(_valid(name: '  '), fileExists: _fsWith({}));
+      final errors = validateConfig(
+        _valid(name: '  '),
+        fileExists: _fsWith({}),
+      );
       expect(errors.map((e) => e.field), contains('name'));
     });
 
     test('rejects non-http schemes', () {
-      for (final bad in ['ftp://example.com', 'file:///tmp/a.html', 'nonsense']) {
-        final errors = validateConfig(_valid(url: bad), fileExists: _fsWith({}));
+      for (final bad in [
+        'ftp://example.com',
+        'file:///tmp/a.html',
+        'nonsense',
+      ]) {
+        final errors = validateConfig(
+          _valid(url: bad),
+          fileExists: _fsWith({}),
+        );
         expect(errors.map((e) => e.field), contains('url'), reason: bad);
       }
     });
 
     test('rejects a url without a host', () {
-      final errors =
-          validateConfig(_valid(url: 'https://'), fileExists: _fsWith({}));
+      final errors = validateConfig(
+        _valid(url: 'https://'),
+        fileExists: _fsWith({}),
+      );
       expect(errors.map((e) => e.field), contains('url'));
     });
 
     test('rejects malformed bundle ids', () {
-      for (final bad in ['nodots', 'com..example', '1com.example', 'com.exa mple', 'com.example-app']) {
-        final errors =
-            validateConfig(_valid(bundleId: bad), fileExists: _fsWith({}));
+      for (final bad in [
+        'nodots',
+        'com..example',
+        '1com.example',
+        'com.exa mple',
+        'com.example-app',
+      ]) {
+        final errors = validateConfig(
+          _valid(bundleId: bad),
+          fileExists: _fsWith({}),
+        );
         expect(errors.map((e) => e.field), contains('bundleId'), reason: bad);
       }
     });
 
-    test('accepts bundle ids with underscores and digits after the first char', () {
-      for (final ok in ['com.example.app2', 'com.my_org.demo_app']) {
-        final errors =
-            validateConfig(_valid(bundleId: ok), fileExists: _fsWith({}));
-        expect(errors, isEmpty, reason: ok);
-      }
-    });
+    test(
+      'accepts bundle ids with underscores and digits after the first char',
+      () {
+        for (final ok in ['com.example.app2', 'com.my_org.demo_app']) {
+          final errors = validateConfig(
+            _valid(bundleId: ok),
+            fileExists: _fsWith({}),
+          );
+          expect(errors, isEmpty, reason: ok);
+        }
+      },
+    );
 
     test('rejects a version that is not x.y.z', () {
       for (final bad in ['1.0', 'v1.0.0', '1.0.0-beta']) {
-        final errors =
-            validateConfig(_valid(version: bad), fileExists: _fsWith({}));
+        final errors = validateConfig(
+          _valid(version: bad),
+          fileExists: _fsWith({}),
+        );
         expect(errors.map((e) => e.field), contains('version'), reason: bad);
       }
     });
@@ -100,7 +126,10 @@ void main() {
         _valid(name: '', url: 'nonsense', bundleId: 'bad'),
         fileExists: _fsWith({}),
       );
-      expect(errors.map((e) => e.field), containsAll(['name', 'url', 'bundleId']));
+      expect(
+        errors.map((e) => e.field),
+        containsAll(['name', 'url', 'bundleId']),
+      );
     });
   });
 }

@@ -12,22 +12,22 @@ enum PakePermission {
   }
 
   String get androidPermission => switch (this) {
-        PakePermission.camera => 'android.permission.CAMERA',
-        PakePermission.microphone => 'android.permission.RECORD_AUDIO',
-        PakePermission.location => 'android.permission.ACCESS_FINE_LOCATION',
-      };
+    PakePermission.camera => 'android.permission.CAMERA',
+    PakePermission.microphone => 'android.permission.RECORD_AUDIO',
+    PakePermission.location => 'android.permission.ACCESS_FINE_LOCATION',
+  };
 
   String get iosUsageKey => switch (this) {
-        PakePermission.camera => 'NSCameraUsageDescription',
-        PakePermission.microphone => 'NSMicrophoneUsageDescription',
-        PakePermission.location => 'NSLocationWhenInUseUsageDescription',
-      };
+    PakePermission.camera => 'NSCameraUsageDescription',
+    PakePermission.microphone => 'NSMicrophoneUsageDescription',
+    PakePermission.location => 'NSLocationWhenInUseUsageDescription',
+  };
 
   String get iosUsageDescription => switch (this) {
-        PakePermission.camera => 'This app uses the camera on the loaded page.',
-        PakePermission.microphone =>
-          'This app uses the microphone on the loaded page.',
-        PakePermission.location =>
-          'This app uses your location on the loaded page.',
-      };
+    PakePermission.camera => 'This app uses the camera on the loaded page.',
+    PakePermission.microphone =>
+      'This app uses the microphone on the loaded page.',
+    PakePermission.location =>
+      'This app uses your location on the loaded page.',
+  };
 }
