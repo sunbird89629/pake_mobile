@@ -112,7 +112,9 @@ class _DebugDrawerState extends State<DebugDrawer> {
 
   @override
   Widget build(BuildContext context) {
-    final scripts = _config.buildTime.injectScripts;
+    // 开关的键必须是 id，不能是 pake.json 里的原始路径——运行期的启用集合
+    // 和 index.json 用的都是 id。id 本身（`hide-ads`）也正好是可读的标题。
+    final scripts = _config.buildTime.injectScripts.map(scriptIdFor).toList();
     final enabled = _config.enabledScripts;
 
     return Scaffold(

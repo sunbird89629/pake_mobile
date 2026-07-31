@@ -121,6 +121,29 @@ void main() {
       expect(errors.map((e) => e.message).join(), contains('gone.js'));
     });
 
+    test('rejects two inject scripts that collide on one id', () {
+      // 物化目录按 id 命名文件，运行期开关也按 id——`a/theme.js` 和
+      // `b/theme.css` 都推出 `theme`，第二个会静默盖掉第一个。
+      final errors = validateConfig(
+        _valid(injectScripts: ['a/theme.js', 'b/theme.css']),
+        fileExists: _fsWith({'a/theme.js', 'b/theme.css'}),
+      );
+
+      expect(errors.length, 1);
+      expect(errors.single.field, 'injectScripts');
+      expect(errors.single.message, contains('theme'));
+    });
+
+    test('accepts same-named scripts as long as their ids differ', () {
+      expect(
+        validateConfig(
+          _valid(injectScripts: ['a/theme.js', 'b/dark.css']),
+          fileExists: _fsWith({'a/theme.js', 'b/dark.css'}),
+        ),
+        isEmpty,
+      );
+    });
+
     test('reports every problem at once rather than stopping at the first', () {
       final errors = validateConfig(
         _valid(name: '', url: 'nonsense', bundleId: 'bad'),

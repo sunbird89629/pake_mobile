@@ -70,16 +70,29 @@ void main() {
     );
   });
 
-  test('all inject scripts are enabled by default', () {
+  test('all inject scripts are enabled by default, as ids not paths', () {
+    // pake.json 存的是原始路径，`assets/scripts/index.json` 和 WebViewPage 用的
+    // 是 id。默认集合放路径 = 一个脚本都注入不了，而且测试照样绿。
     final c = RuntimeConfig.fromBuildTime(_buildTime);
 
-    expect(c.enabledScripts, {'hide-ads.js'});
+    expect(c.enabledScripts, {'hide-ads'});
+  });
+
+  test('the default set is id-shaped even for nested and absolute paths', () {
+    final c = RuntimeConfig.fromBuildTime(
+      const PakeConfig(
+        name: 'Weibo',
+        url: 'https://m.weibo.cn',
+        bundleId: 'com.pake.weibo',
+        injectScripts: ['scripts/theme.css', '/abs/dir/fix-video.js'],
+      ),
+    );
+
+    expect(c.enabledScripts, {'theme', 'fix-video'});
   });
 
   test('toggling a script off persists', () {
-    RuntimeConfig.fromBuildTime(
-      _buildTime,
-    ).setScriptEnabled('hide-ads.js', false);
+    RuntimeConfig.fromBuildTime(_buildTime).setScriptEnabled('hide-ads', false);
 
     expect(RuntimeConfig.fromBuildTime(_buildTime).enabledScripts, isEmpty);
   });
@@ -92,7 +105,7 @@ void main() {
     final c = RuntimeConfig.fromBuildTime(_buildTime);
 
     expect(c.url, 'https://m.weibo.cn');
-    expect(c.enabledScripts, {'hide-ads.js'});
+    expect(c.enabledScripts, {'hide-ads'});
   });
 
   test('userAgent defaults to empty, meaning the system default', () {

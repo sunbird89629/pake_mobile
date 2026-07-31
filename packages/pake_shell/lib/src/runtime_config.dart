@@ -36,9 +36,13 @@ class RuntimeConfig {
   set fullscreen(bool value) => _box.write(RuntimeKeys.fullscreen, value);
 
   /// 默认全开——构建时特意打包进来的脚本，默认不生效才是意外。
+  ///
+  /// 集合里放的是 **id**（`scriptIdFor`），不是 `pake.json` 里的原始路径：
+  /// `assets/scripts/index.json` 和设置页开关用的都是 id，这里放路径就等于
+  /// 所有脚本永远匹配不上，一个都注入不了。
   Set<String> get enabledScripts {
     final stored = _box.read<Object?>(RuntimeKeys.enabledScripts);
-    if (stored is! List) return buildTime.injectScripts.toSet();
+    if (stored is! List) return defaultEnabledScripts(buildTime);
     return stored.whereType<String>().toSet();
   }
 

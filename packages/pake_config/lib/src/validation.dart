@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'config.dart';
+import 'script_id.dart';
 
 /// 一条配置错误。CLI 把它渲染成人类可读文本或 `--json` 的 error 数组。
 class ConfigError {
@@ -73,11 +74,28 @@ List<ConfigError> validateConfig(
     errors.add(ConfigError('iconPath', 'Icon file not found: $icon'));
   }
 
+  // 两个脚本推出同一个 id（`a/theme.js` 与 `b/theme.css` 都是 `theme`）时，
+  // 后者会在物化目录里静默盖掉前者，运行期开关也只剩一个——必须在这里拦下。
+  final idOwners = <String, String>{};
   for (final script in config.injectScripts) {
     if (!exists(script)) {
       errors.add(
         ConfigError('injectScripts', 'Inject file not found: $script'),
       );
+    }
+
+    final id = scriptIdFor(script);
+    final owner = idOwners[id];
+    if (owner != null) {
+      errors.add(
+        ConfigError(
+          'injectScripts',
+          'Duplicate script id "$id": "$owner" and "$script" would overwrite '
+              'each other. Rename one of them.',
+        ),
+      );
+    } else {
+      idOwners[id] = script;
     }
   }
 

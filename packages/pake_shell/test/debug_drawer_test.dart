@@ -77,11 +77,15 @@ void main() {
   });
 
   group('DebugDrawer', () {
-    testWidgets('lists one switch per inject script', (tester) async {
+    testWidgets('lists one switch per inject script, keyed by script id', (
+      tester,
+    ) async {
       await pump(tester);
 
-      expect(find.text('hide-ads.js'), findsOneWidget);
-      expect(find.text('fix-video.js'), findsOneWidget);
+      // id，不是 pake.json 里的原始路径：开关写进 enabledScripts 的必须是
+      // `assets/scripts/index.json` 里那个 id，否则 WebViewPage 读不到。
+      expect(find.text('hide-ads'), findsOneWidget);
+      expect(find.text('fix-video'), findsOneWidget);
       expect(find.byType(SwitchListTile), findsNWidgets(2));
     });
 
@@ -102,7 +106,14 @@ void main() {
       await tester.tap(find.byType(SwitchListTile).first);
       await tester.pumpAndSettle();
 
-      expect(config.enabledScripts, isNot(contains('hide-ads.js')));
+      expect(config.enabledScripts, isNot(contains('hide-ads')));
+      expect(
+        config.enabledScripts,
+        contains('fix-video'),
+        reason:
+            'turning one script off must leave the others on — and the set '
+            'that survives has to be ids, or nothing matches index.json',
+      );
       expect(reloadCount, 1, reason: 'scripts only take effect on next load');
     });
 

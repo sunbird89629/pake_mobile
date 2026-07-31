@@ -1,3 +1,4 @@
+import 'package:pake_config/pake_config.dart';
 import 'package:path/path.dart' as p;
 
 enum ScriptKind { js, css }
@@ -31,7 +32,9 @@ MaterializedScript materializeScript({
   required String content,
 }) {
   final ext = p.extension(path).toLowerCase();
-  final id = p.basenameWithoutExtension(path);
+  // 必须走 pake_config 的 scriptIdFor：壳算默认启用集合用的是同一个函数，
+  // 两边各自实现「id 是什么」就是 Critical 1 那个静默失效的成因。
+  final id = scriptIdFor(path);
 
   final kind = switch (ext) {
     '.js' => ScriptKind.js,

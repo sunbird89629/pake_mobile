@@ -5,4 +5,5 @@ export 'src/config.dart';
 export 'src/merge.dart';
 export 'src/permission.dart';
 export 'src/runtime_keys.dart';
+export 'src/script_id.dart';
 export 'src/validation.dart';
