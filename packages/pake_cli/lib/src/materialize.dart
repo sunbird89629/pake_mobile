@@ -73,7 +73,8 @@ void materializeConfig({
   // 壳在启动时读它作为运行期默认值。
   final assetsDir = Directory(p.join(root, 'assets'))
     ..createSync(recursive: true);
-  File(p.join(assetsDir.path, 'pake.json')).writeAsStringSync(
+  _writeIfChanged(
+    File(p.join(assetsDir.path, 'pake.json')),
     const JsonEncoder.withIndent('  ').convert(config.toJson()),
   );
 
@@ -127,8 +128,19 @@ void _patchFile(String path, String Function(String) patch) {
       'Expected template file missing after sync: $path',
     );
   }
-  final patched = patch(file.readAsStringSync());
-  // 内容没变就不写，保住 Gradle 的 up-to-date 判定。
-  if (file.readAsStringSync() == patched) return;
-  file.writeAsStringSync(patched);
+  final original = file.readAsStringSync();
+  // 已经读过一次原内容了，直接传进去比对，不必让 _writeIfChanged 再读一遍。
+  _writeIfChanged(file, patch(original), current: original);
+}
+
+/// 只在内容真的变了才写——无谓的 mtime 变化会让 Gradle 的 up-to-date
+/// 判定失效，整个固定 workspace 的增量缓存就白搭了。
+///
+/// [current] 是调用方手上已经有的原内容，传进来能省一次读盘；不传就自己读。
+void _writeIfChanged(File file, String content, {String? current}) {
+  final existing =
+      current ?? (file.existsSync() ? file.readAsStringSync() : null);
+  if (existing == content) return;
+  file.parent.createSync(recursive: true);
+  file.writeAsStringSync(content);
 }

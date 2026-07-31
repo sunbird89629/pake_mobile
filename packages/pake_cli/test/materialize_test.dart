@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:pake_cli/src/materialize.dart';
+import 'package:pake_cli/src/output.dart';
 import 'package:pake_cli/src/workspace.dart';
 import 'package:pake_config/pake_config.dart';
 import 'package:test/test.dart';
@@ -111,6 +112,64 @@ void main() {
 
       expect(restored.url, 'https://m.weibo.cn');
       expect(restored.name, 'Weibo');
+    });
+
+    test('does not rewrite assets/pake.json when the config is unchanged', () {
+      materializeConfig(config: config, workspace: ws, cwd: tmp.path);
+      final file = File('${ws.projectDir}/assets/pake.json');
+      final stamp = DateTime(2000);
+      file.setLastModifiedSync(stamp);
+
+      materializeConfig(config: config, workspace: ws, cwd: tmp.path);
+
+      expect(
+        file.lastModifiedSync(),
+        stamp,
+        reason:
+            'an unnecessary mtime bump on an unchanged config invalidates '
+            "Gradle's up-to-date checks",
+      );
+    });
+
+    test(
+      'throws with the missing path when a template file did not survive sync',
+      () {
+        File('${ws.projectDir}/android/app/build.gradle.kts').deleteSync();
+
+        expect(
+          () => materializeConfig(config: config, workspace: ws, cwd: tmp.path),
+          throwsA(
+            isA<PakeException>()
+                .having((e) => e.exitCode, 'exitCode', ExitCodes.build)
+                .having(
+                  (e) => e.message,
+                  'message',
+                  contains('build.gradle.kts'),
+                ),
+          ),
+        );
+      },
+    );
+
+    test('throws even for an android-only build when the template is missing '
+        'its ios subtree', () {
+      // pake_shell 是单一 `flutter create --platforms=android,ios` 产物，
+      // android/ios 两棵子树本该总是同时存在——`--platform` 只决定后面
+      // 跑哪个 `flutter build`，不代表 workspace 里可以缺一棵子树。
+      // 模板缺角说明模板安装坏了，materializeConfig 不区分请求的平台，
+      // 该炸就炸，不能因为这次只打 android 就悄悄放过。
+      Directory('${ws.projectDir}/ios').deleteSync(recursive: true);
+
+      expect(
+        () => materializeConfig(config: config, workspace: ws, cwd: tmp.path),
+        throwsA(
+          isA<PakeException>().having(
+            (e) => e.exitCode,
+            'exitCode',
+            ExitCodes.build,
+          ),
+        ),
+      );
     });
 
     test('patches gradle, manifest, plist and pbxproj', () {
