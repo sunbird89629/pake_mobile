@@ -8,7 +8,9 @@ import 'package:path/path.dart' as p;
 import '../build_pipeline.dart';
 import '../materialize.dart';
 import '../output.dart';
+import '../patch/ios.dart';
 import '../process_runner.dart';
+import '../signing.dart';
 import '../workspace.dart';
 
 class BuildCommand extends Command<int> {
@@ -103,6 +105,34 @@ class BuildCommand extends Command<int> {
         .map((s) => PakePlatform.byName(s.trim()))
         .toList();
 
+    String? exportOptionsPath;
+    if (platforms.contains(PakePlatform.ios)) {
+      final teamId = args.option('team-id');
+      final profileName = args.option('profile');
+      if (teamId == null || profileName == null) {
+        throw PakeException(
+          ExitCodes.config,
+          'iOS builds need --team-id and --profile.',
+        );
+      }
+
+      await checkIosSigning(
+        runner: _runner,
+        profileName: profileName,
+        bundleId: config.bundleId,
+        profiles: await loadInstalledProfiles(_runner),
+      );
+
+      exportOptionsPath = p.join(_workspace.root, 'ExportOptions.plist');
+      File(exportOptionsPath).writeAsStringSync(
+        exportOptionsPlist(
+          teamId: teamId,
+          profileName: profileName,
+          bundleId: config.bundleId,
+        ),
+      );
+    }
+
     final templateDir = await _resolveTemplateDir();
 
     final artifacts = await _workspace.withLock(() async {
@@ -119,6 +149,7 @@ class BuildCommand extends Command<int> {
         workspace: _workspace,
         runner: _runner,
         output: _output,
+        exportOptionsPath: exportOptionsPath,
       );
     });
 
