@@ -46,6 +46,70 @@ void main() {
     expect(count, 0);
   });
 
+  testWidgets('a short tap in the corner reaches the content behind it', (
+    tester,
+  ) async {
+    // opaque 会在这里吞掉命中测试，底下的 WebView 收不到任何短按——
+    // 而移动站点的汉堡菜单和返回按钮就在这 44×44 里。
+    var behindTaps = 0;
+    var triggered = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Stack(
+          children: [
+            GestureDetector(
+              onTap: () => behindTaps++,
+              child: const ColoredBox(
+                color: Colors.blue,
+                child: SizedBox.expand(),
+              ),
+            ),
+            EscapeHatch(onTriggered: () => triggered++),
+          ],
+        ),
+      ),
+    );
+
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+
+    expect(behindTaps, 1, reason: 'the site\'s own top-left button must work');
+    expect(triggered, 0);
+  });
+
+  testWidgets('the long press still wins over content behind it', (
+    tester,
+  ) async {
+    // translucent 让底下的目标也进了手势竞技场——必须确认 1.5s 长按仍然
+    // 识别得到，且不会退化成底下那个 onTap。
+    var behindTaps = 0;
+    var triggered = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Stack(
+          children: [
+            GestureDetector(
+              onTap: () => behindTaps++,
+              child: const ColoredBox(
+                color: Colors.blue,
+                child: SizedBox.expand(),
+              ),
+            ),
+            EscapeHatch(onTriggered: () => triggered++),
+          ],
+        ),
+      ),
+    );
+
+    final gesture = await tester.startGesture(const Offset(10, 10));
+    await tester.pump(const Duration(milliseconds: 1600));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(triggered, 1);
+    expect(behindTaps, 0, reason: 'a long press must not double as a tap');
+  });
+
   testWidgets('it occupies a 44x44 area pinned to the top-left corner', (
     tester,
   ) async {

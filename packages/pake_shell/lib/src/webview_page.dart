@@ -141,49 +141,53 @@ class WebViewPageState extends State<WebViewPage> {
       );
     }
 
-    return InAppWebView(
-      // 数量相同、内容不同的脚本切换（关 A 开 B）必须换 key，见 scriptsKey 的注释。
-      key: ValueKey(scriptsKey(_scriptIds)),
-      initialUrlRequest: URLRequest(url: WebUri(widget.config.url)),
-      initialSettings: _settings,
-      initialUserScripts: UnmodifiableListView(_scripts),
-      onWebViewCreated: (c) {
-        _controller = c;
-        c.addJavaScriptHandler(
-          handlerName: 'pakeNet',
-          callback: (args) {
-            if (args.isEmpty || args.first is! Map) return;
-            netLog.add(
-              NetRecord.fromHandlerJson(args.first as Map<Object?, Object?>),
-            );
-          },
-        );
-      },
-      onLoadResource: (_, resource) => netLog.add(
-        NetRecord(
-          url: resource.url?.toString() ?? '',
-          method: 'GET',
-          status: 0,
-          durationMs: resource.duration?.round() ?? 0,
-          at: DateTime.now(),
-          source: NetSource.resource,
-        ),
-      ),
-      onConsoleMessage: (_, msg) => devLogger.info('[console] ${msg.message}'),
-      onReceivedError: (_, _, error) {
-        devLogger.severe('load error: ${error.type} ${error.description}');
-        // `WebResourceErrorType` 是 `@ExchangeableEnum` 生成出来的类，不是
-        // 普通 Dart enum——没有 `.name` getter。用 `toValue()` 拿真实字符串。
-        setState(
-          () => _failure = classifyFailure(errorType: error.type.toValue()),
-        );
-      },
-      onReceivedHttpError: (_, _, response) {
-        devLogger.severe('http error: ${response.statusCode}');
-        setState(
-          () => _failure = classifyFailure(httpStatus: response.statusCode),
-        );
-      },
-    );
+    // 不包 SafeArea 的话网页会画到状态栏和刘海底下，每个站点的顶部导航
+    // 都压在时钟下面。`ErrorPage` 一直是包着的，这里是那条不对称。
+    return SafeArea(child: _webView);
   }
+
+  Widget get _webView => InAppWebView(
+    // 数量相同、内容不同的脚本切换（关 A 开 B）必须换 key，见 scriptsKey 的注释。
+    key: ValueKey(scriptsKey(_scriptIds)),
+    initialUrlRequest: URLRequest(url: WebUri(widget.config.url)),
+    initialSettings: _settings,
+    initialUserScripts: UnmodifiableListView(_scripts),
+    onWebViewCreated: (c) {
+      _controller = c;
+      c.addJavaScriptHandler(
+        handlerName: 'pakeNet',
+        callback: (args) {
+          if (args.isEmpty || args.first is! Map) return;
+          netLog.add(
+            NetRecord.fromHandlerJson(args.first as Map<Object?, Object?>),
+          );
+        },
+      );
+    },
+    onLoadResource: (_, resource) => netLog.add(
+      NetRecord(
+        url: resource.url?.toString() ?? '',
+        method: 'GET',
+        status: 0,
+        durationMs: resource.duration?.round() ?? 0,
+        at: DateTime.now(),
+        source: NetSource.resource,
+      ),
+    ),
+    onConsoleMessage: (_, msg) => devLogger.info('[console] ${msg.message}'),
+    onReceivedError: (_, _, error) {
+      devLogger.severe('load error: ${error.type} ${error.description}');
+      // `WebResourceErrorType` 是 `@ExchangeableEnum` 生成出来的类，不是
+      // 普通 Dart enum——没有 `.name` getter。用 `toValue()` 拿真实字符串。
+      setState(
+        () => _failure = classifyFailure(errorType: error.type.toValue()),
+      );
+    },
+    onReceivedHttpError: (_, _, response) {
+      devLogger.severe('http error: ${response.statusCode}');
+      setState(
+        () => _failure = classifyFailure(httpStatus: response.statusCode),
+      );
+    },
+  );
 }

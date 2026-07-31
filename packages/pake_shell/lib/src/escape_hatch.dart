@@ -18,7 +18,12 @@ class EscapeHatch extends StatelessWidget {
       // GestureDetector.onLongPress 写死 500ms，太容易误触，
       // 所以这里下沉到 RawGestureDetector 自定义时长。
       child: RawGestureDetector(
-        behavior: HitTestBehavior.opaque,
+        // translucent 而不是 opaque：opaque 会让命中测试在这里停住，底下的
+        // `InAppWebView` 一个事件都收不到——而左上角 44×44 正是移动站点放
+        // 汉堡菜单和返回按钮的地方，那些按钮会变成完全点不动。
+        // translucent 仍然把自己加进命中结果（长按照样识别），只是不拦截
+        // 后面的目标。
+        behavior: HitTestBehavior.translucent,
         gestures: {
           LongPressGestureRecognizer:
               GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
