@@ -31,6 +31,25 @@ void main() {
     });
   });
 
+  group('shouldSurfaceError', () {
+    test('surfaces a main-frame failure', () {
+      expect(shouldSurfaceError(isForMainFrame: true), isTrue);
+    });
+
+    test('suppresses a sub-resource failure', () {
+      // 这是本次要修的 bug 本身：一个失败的子资源（图片/XHR/字体……）不该
+      // 把整页盖成错误页——真实页面还在底下正常运行。
+      expect(shouldSurfaceError(isForMainFrame: false), isFalse);
+    });
+
+    test('treats a null isForMainFrame as not main frame', () {
+      // 两个平台实测都会填这个字段（见 shouldSurfaceError 上的注释），null
+      // 理论上不会发生；万一发生，宁可漏报（EscapeHatch 仍能兜底）也不要
+      // 重犯"子资源失败盖掉整页"这个 bug。
+      expect(shouldSurfaceError(isForMainFrame: null), isFalse);
+    });
+  });
+
   group('ErrorPage', () {
     Future<void> pump(WidgetTester tester, LoadFailureKind kind) =>
         tester.pumpWidget(

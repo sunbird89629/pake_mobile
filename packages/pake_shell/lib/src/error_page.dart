@@ -27,6 +27,29 @@ LoadFailureKind classifyFailure({int? httpStatus, String? errorType}) {
   };
 }
 
+/// `onReceivedError`/`onReceivedHttpError` fire for *every* resource a page
+/// loads — images, XHR, fonts, analytics — not just the main document. Only
+/// a main-frame failure should cover the screen with [ErrorPage]; a failing
+/// sub-resource is diagnostic noise, and the working page underneath it
+/// must stay visible.
+///
+/// `isForMainFrame` is nullable in the plugin's type. Both platforms this
+/// app targets populate it in practice: Android's `WebResourceRequest`
+/// always carries a primitive (non-null) `isForMainFrame`, and on iOS it is
+/// hardcoded `true` for `onReceivedError` (WKWebView's `didFail` delegate
+/// method only ever fires for main-frame navigation failures — there is no
+/// callback for sub-resource load errors) and set from
+/// `WKNavigationResponse.isForMainFrame` for `onReceivedHttpError`. So
+/// `null` should not occur here. If it ever does, we treat it as "not main
+/// frame" (don't surface an error page) rather than "main frame" — this
+/// matches the plugin's own precedent for its deprecated single-argument
+/// callbacks (`request.isForMainFrame ?? false`), and it fails toward the
+/// bug we are fixing (a hidden sub-resource failure, recoverable via
+/// [ErrorPage]'s settings escape hatch) rather than back into it (an
+/// innocuous sub-resource error blanking out a working page).
+bool shouldSurfaceError({required bool? isForMainFrame}) =>
+    isForMainFrame ?? false;
+
 class ErrorPage extends StatelessWidget {
   const ErrorPage({
     super.key,

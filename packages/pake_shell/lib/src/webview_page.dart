@@ -179,7 +179,16 @@ class WebViewPageState extends State<WebViewPage> {
       ),
     ),
     onConsoleMessage: (_, msg) => devLogger.info('[console] ${msg.message}'),
-    onReceivedError: (_, _, error) {
+    onReceivedError: (_, request, error) {
+      // 每个子资源（图片/XHR/字体……）失败都会触发这个回调，不只是主文档。
+      // 只有主文档失败才该整页盖错误页——见 shouldSurfaceError 的空值策略注释。
+      if (!shouldSurfaceError(isForMainFrame: request.isForMainFrame)) {
+        devLogger.info(
+          'sub-resource load error: ${error.type} ${error.description} '
+          '(${request.url})',
+        );
+        return;
+      }
       devLogger.severe('load error: ${error.type} ${error.description}');
       // `WebResourceErrorType` 是 `@ExchangeableEnum` 生成出来的类，不是
       // 普通 Dart enum——没有 `.name` getter。用 `toValue()` 拿真实字符串。
@@ -187,7 +196,13 @@ class WebViewPageState extends State<WebViewPage> {
         () => _failure = classifyFailure(errorType: error.type.toValue()),
       );
     },
-    onReceivedHttpError: (_, _, response) {
+    onReceivedHttpError: (_, request, response) {
+      if (!shouldSurfaceError(isForMainFrame: request.isForMainFrame)) {
+        devLogger.info(
+          'sub-resource http error: ${response.statusCode} (${request.url})',
+        );
+        return;
+      }
       devLogger.severe('http error: ${response.statusCode}');
       setState(
         () => _failure = classifyFailure(httpStatus: response.statusCode),
