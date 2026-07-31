@@ -30,10 +30,14 @@ class RuntimeConfig {
   String get userAgent => _readString(RuntimeKeys.userAgent) ?? '';
   set userAgent(String value) => _box.write(RuntimeKeys.userAgent, value);
 
-  bool get fullscreen => _box.read<Object?>(RuntimeKeys.fullscreen) is bool
-      ? _box.read<bool>(RuntimeKeys.fullscreen)!
-      : true;
+  bool get fullscreen => _readBool(RuntimeKeys.fullscreen) ?? true;
   set fullscreen(bool value) => _box.write(RuntimeKeys.fullscreen, value);
+
+  /// 抓包 hook 默认开——这个壳的用途之一就是看站点发了什么请求。
+  /// 但它会 hook 掉页面的 fetch/XHR，出问题时必须能关。
+  bool get captureNetwork => _readBool(RuntimeKeys.captureNetwork) ?? true;
+  set captureNetwork(bool value) =>
+      _box.write(RuntimeKeys.captureNetwork, value);
 
   /// 默认全开——构建时特意打包进来的脚本，默认不生效才是意外。
   ///
@@ -62,6 +66,7 @@ class RuntimeConfig {
       RuntimeKeys.enabledScripts,
       RuntimeKeys.logLevel,
       RuntimeKeys.fullscreen,
+      RuntimeKeys.captureNetwork,
     ]) {
       _box.remove(key);
     }
@@ -71,5 +76,10 @@ class RuntimeConfig {
   String? _readString(String key) {
     final value = _box.read<Object?>(key);
     return value is String && value.isNotEmpty ? value : null;
+  }
+
+  bool? _readBool(String key) {
+    final value = _box.read<Object?>(key);
+    return value is bool ? value : null;
   }
 }

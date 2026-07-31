@@ -8,6 +8,10 @@ abstract final class RuntimeKeys {
   static const enabledScripts = 'pake.enabledScripts';
   static const logLevel = 'pake.logLevel';
   static const fullscreen = 'pake.fullscreen';
+
+  /// 抓包 hook 的开关。它是唯一无条件注入的脚本，没有这个键，用户就是
+  /// 关不掉它——而它要 hook 掉页面的 fetch/XHR。
+  static const captureNetwork = 'pake.captureNetwork';
 }
 
 /// 设置页「切 UA」的预设。`Default` 映射到空串，表示用系统默认 UA。

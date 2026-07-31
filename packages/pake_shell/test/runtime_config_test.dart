@@ -108,6 +108,30 @@ void main() {
     expect(c.enabledScripts, {'hide-ads'});
   });
 
+  test('network capture is on by default but can be turned off', () {
+    // net_hook 是唯一无条件注入的脚本——它替换页面的 fetch/XHR，
+    // 出问题时用户必须能关掉它。
+    expect(RuntimeConfig.fromBuildTime(_buildTime).captureNetwork, isTrue);
+
+    RuntimeConfig.fromBuildTime(_buildTime).captureNetwork = false;
+
+    expect(RuntimeConfig.fromBuildTime(_buildTime).captureNetwork, isFalse);
+  });
+
+  test('reset turns network capture back on', () {
+    final c = RuntimeConfig.fromBuildTime(_buildTime)..captureNetwork = false;
+
+    c.reset();
+
+    expect(c.captureNetwork, isTrue);
+  });
+
+  test('a corrupt captureNetwork value falls back to on', () {
+    GetStorage().write(RuntimeKeys.captureNetwork, 'yes-please');
+
+    expect(RuntimeConfig.fromBuildTime(_buildTime).captureNetwork, isTrue);
+  });
+
   test('userAgent defaults to empty, meaning the system default', () {
     expect(RuntimeConfig.fromBuildTime(_buildTime).userAgent, isEmpty);
   });

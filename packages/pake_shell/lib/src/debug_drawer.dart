@@ -150,10 +150,24 @@ class _DebugDrawerState extends State<DebugDrawer> {
           ),
           for (final id in scripts)
             SwitchListTile(
+              key: ValueKey('script:$id'),
               title: Text(id),
               value: enabled.contains(id),
               onChanged: (on) => _toggleScript(id, on),
             ),
+          const Divider(),
+          SwitchListTile(
+            title: const Text('Capture network'),
+            subtitle: const Text(
+              'Hooks the page\'s fetch and XHR to fill the requests list.',
+            ),
+            value: _config.captureNetwork,
+            onChanged: (on) {
+              _config.captureNetwork = on;
+              setState(() {});
+              widget.onReloadRequested();
+            },
+          ),
           const Divider(),
           ListTile(
             title: const Text('Clear cache & cookies'),

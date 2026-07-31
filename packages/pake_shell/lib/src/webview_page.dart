@@ -91,15 +91,18 @@ class WebViewPageState extends State<WebViewPage> {
     }
 
     // 网络抓包 hook 必须排在用户脚本之前、AT_DOCUMENT_START 注入，
-    // 否则页面早期发的请求就漏抓了。
-    scripts.insert(
-      0,
-      UserScript(
-        groupName: '__pake_net_hook',
-        source: await rootBundle.loadString('assets/net_hook.js'),
-        injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
-      ),
-    );
+    // 否则页面早期发的请求就漏抓了。它会替换页面的 fetch/XHR，所以要留
+    // 一个开关——设置页关掉后，这里就一句都不注入。
+    if (widget.config.captureNetwork) {
+      scripts.insert(
+        0,
+        UserScript(
+          groupName: '__pake_net_hook',
+          source: await rootBundle.loadString('assets/net_hook.js'),
+          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+        ),
+      );
+    }
 
     if (mounted) {
       setState(() {

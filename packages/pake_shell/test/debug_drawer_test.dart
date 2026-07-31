@@ -86,7 +86,14 @@ void main() {
       // `assets/scripts/index.json` 里那个 id，否则 WebViewPage 读不到。
       expect(find.text('hide-ads'), findsOneWidget);
       expect(find.text('fix-video'), findsOneWidget);
-      expect(find.byType(SwitchListTile), findsNWidgets(2));
+      // 按 key 数，而不是数所有 SwitchListTile——设置页还有别的开关
+      // （比如 Capture network），那个计数会跟着无关改动一起漂。
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is SwitchListTile && w.key.toString().contains('script:'),
+        ),
+        findsNWidgets(2),
+      );
     });
 
     testWidgets('every script starts enabled', (tester) async {
@@ -114,6 +121,20 @@ void main() {
             'turning one script off must leave the others on — and the set '
             'that survives has to be ids, or nothing matches index.json',
       );
+      expect(reloadCount, 1, reason: 'scripts only take effect on next load');
+    });
+
+    testWidgets('offers a switch that turns network capture off', (
+      tester,
+    ) async {
+      // 抓包 hook 曾经是唯一没有开关的注入脚本。
+      await pump(tester);
+
+      await tester.scrollUntilVisible(find.text('Capture network'), 200);
+      await tester.tap(find.text('Capture network'));
+      await tester.pumpAndSettle();
+
+      expect(config.captureNetwork, isFalse);
       expect(reloadCount, 1, reason: 'scripts only take effect on next load');
     });
 
