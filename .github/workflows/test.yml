@@ -1,0 +1,28 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.2'
+          cache: true
+
+      - name: pake_config
+        working-directory: packages/pake_config
+        run: dart pub get && dart test
+
+      - name: pake_cli
+        working-directory: packages/pake_cli
+        run: dart pub get && dart test
+
+      - name: pake_shell
+        working-directory: packages/pake_shell
+        run: flutter pub get && flutter test

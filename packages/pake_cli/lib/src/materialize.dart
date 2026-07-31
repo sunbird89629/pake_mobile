@@ -27,6 +27,16 @@ const _cacheDirs = {
 /// 幂等地把模板同步进固定 workspace：只覆写会变的文件，其余不动。
 void syncTemplate({required String templateDir, required String projectDir}) {
   final template = Directory(templateDir);
+
+  // `pake_shell/pubspec.yaml` 里 `pake_config: path: ../pake_config` 是
+  // 按源码仓库里的兄弟目录关系写的。模板被复制进 `~/.pake/workspace`
+  // 后这个相对路径不再指向任何东西——workspace 不在仓库里。固定改写成
+  // 指回仓库里 `pake_config` 的绝对路径；两者在仓库里永远是 pake_shell
+  // 的兄弟目录，这与 `_resolveTemplateDir` 定位 `pake_shell` 本身用的
+  // 是同一个假设。（Task 18 端到端 smoke test 第一次真实构建时发现：
+  // 不这么改，`flutter pub get` 在 workspace 里直接失败。）
+  final pakeConfigPath = p.normalize(p.join(templateDir, '..', 'pake_config'));
+
   for (final entity in template.listSync(recursive: true)) {
     if (entity is! File) continue;
 
@@ -36,14 +46,44 @@ void syncTemplate({required String templateDir, required String projectDir}) {
     final target = File(p.join(projectDir, relative));
     target.parent.createSync(recursive: true);
 
+    if (relative == 'pubspec.yaml') {
+      _writeIfChanged(
+        target,
+        _rewritePakeConfigPath(entity.readAsStringSync(), pakeConfigPath),
+      );
+      continue;
+    }
+
     // 内容相同就别写——无谓的 mtime 变化会让 Gradle 判定任务失效。
+    //
+    // 必须按字节比较，不能解码成字符串：模板树里混着图标、launch image
+    // 这类二进制文件，不是合法 UTF-8，`readAsStringSync` 在它们身上会
+    // 直接抛 FileSystemException。首次同步时 target 还不存在，走的是
+    // 下面的 copySync，不会触发这条比较；真正暴露问题的是固定 workspace
+    // 被复用的第二次构建——这正是这个 workspace 存在的意义，所以这条路
+    // 径必然会被走到。（同样在 Task 18 的第一次真实构建里发现。）
     if (target.existsSync() &&
-        target.readAsBytesSync().length == entity.lengthSync() &&
-        target.readAsStringSync() == entity.readAsStringSync()) {
+        target.lengthSync() == entity.lengthSync() &&
+        _bytesEqual(target.readAsBytesSync(), entity.readAsBytesSync())) {
       continue;
     }
     entity.copySync(target.path);
   }
+}
+
+String _rewritePakeConfigPath(String pubspec, String absolutePath) {
+  return pubspec.replaceFirst(
+    RegExp(r'path:\s*\.\./pake_config'),
+    'path: $absolutePath',
+  );
+}
+
+bool _bytesEqual(List<int> a, List<int> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
 
 /// 把配置物化进已同步的 workspace。

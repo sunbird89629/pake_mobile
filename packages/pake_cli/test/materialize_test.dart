@@ -6,6 +6,7 @@ import 'package:pake_cli/src/materialize.dart';
 import 'package:pake_cli/src/output.dart';
 import 'package:pake_cli/src/workspace.dart';
 import 'package:pake_config/pake_config.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void _write(String path, String content) => File(path)
@@ -40,6 +41,12 @@ void main() {
       '$templateDir/ios/Runner.xcodeproj/project.pbxproj',
       'PRODUCT_BUNDLE_IDENTIFIER = com.example.pakeShell;',
     );
+    _write('$templateDir/pubspec.yaml', '''
+name: pake_shell
+dependencies:
+  pake_config:
+    path: ../pake_config
+''');
   });
   tearDown(() => tmp.deleteSync(recursive: true));
 
@@ -88,6 +95,45 @@ void main() {
         contains('print(1)'),
       );
     });
+
+    test('rewrites pubspec.yaml\'s pake_config path dependency to an absolute '
+        'path, since the workspace is not a sibling of pake_config', () {
+      syncTemplate(templateDir: templateDir, projectDir: ws.projectDir);
+
+      final synced = File('${ws.projectDir}/pubspec.yaml').readAsStringSync();
+      expect(synced, isNot(contains('../pake_config')));
+      expect(
+        synced,
+        contains(
+          'path: ${p.normalize(p.join(templateDir, '..', 'pake_config'))}',
+        ),
+      );
+    });
+
+    test(
+      'does not crash on a re-sync of a binary file that is not valid utf-8',
+      () {
+        // 真实模板里混着 PNG 之类的二进制文件。第一次同步走 copySync，
+        // 第二次同步（固定 workspace 复用时必然发生）会命中「内容相同就
+        // 别写」的比较分支——这条分支曾经用 readAsStringSync 解码比较，
+        // 在非 UTF-8 字节上直接抛异常。
+        final pngBytes = [0x89, 0x50, 0x4e, 0x47, 0xff, 0xd8, 0x00, 0xc0];
+        File('$templateDir/ios/Runner/Assets.xcassets/icon.png')
+          ..createSync(recursive: true)
+          ..writeAsBytesSync(pngBytes);
+
+        syncTemplate(templateDir: templateDir, projectDir: ws.projectDir);
+        // Re-sync with identical content — must not throw.
+        syncTemplate(templateDir: templateDir, projectDir: ws.projectDir);
+
+        expect(
+          File(
+            '${ws.projectDir}/ios/Runner/Assets.xcassets/icon.png',
+          ).readAsBytesSync(),
+          pngBytes,
+        );
+      },
+    );
   });
 
   group('materializeConfig', () {

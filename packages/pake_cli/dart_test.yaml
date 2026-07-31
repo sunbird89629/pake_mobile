@@ -1,0 +1,6 @@
+tags:
+  smoke:
+    # `--tags smoke` alone only *selects* this test; it does not lift this
+    # unconditional skip. `--run-skipped` is required too, or `dart test
+    # --tags smoke` silently reports "All tests skipped." with exit 0.
+    skip: "slow — run explicitly with: dart test --tags smoke --run-skipped"
