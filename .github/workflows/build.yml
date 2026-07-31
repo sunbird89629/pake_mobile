@@ -35,12 +35,18 @@ jobs:
       # 已被 GitHub 标记为 deprecated 且「does not work as intended」。
       # 独立 save + `if: always()` 是推荐替代方案——job 即使失败也会
       # 保留已下载的 Gradle 依赖，下次运行仍是热构建。
+      #
+      # 用 `restore-keys` 做前缀匹配回退：每次存储用唯一 key（包含
+      # run_id），但恢复时匹配任意一次历史运行——GitHub cache 是
+      # immutable 的，正好利用这个属性实现「只存不覆盖、恢复取最新」。
       - uses: actions/cache/restore@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('packages/pake_shell/android/**/*.gradle*') }}
+          key: gradle-${{ runner.os }}-${{ hashFiles('packages/pake_shell/android/**/*.gradle*') }}-${{ github.run_id }}
+          restore-keys: gradle-${{ runner.os }}-${{ hashFiles('packages/pake_shell/android/**/*.gradle*') }}-
+
 
       # 不走 `dart pub global activate`：它生成的壳脚本会把
       # "Resolving dependencies…" 打到 stdout，混在 `--json` 输出前面，
@@ -120,13 +126,16 @@ jobs:
       # restore 在上面（Build 之前），save 在这里（Build 之后）。
       # `if: always()` 确保即使 Build / Report / Collect 任何一步失败，
       # Gradle 缓存也会保留——下次运行不需从头下载 1.2GB 依赖。
+      #
+      # key 含 `run_id` 所以每次都是唯一的，不会因为 immutable 冲突
+      # 导致 save 失败。下次运行的 restore-keys 前缀匹配捡起这份缓存。
       - uses: actions/cache/save@v4
         if: always()
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('packages/pake_shell/android/**/*.gradle*') }}
+          key: gradle-${{ runner.os }}-${{ hashFiles('packages/pake_shell/android/**/*.gradle*') }}-${{ github.run_id }}
 
   smoke:
     # 不再自己做一次完整 Android 构建——直接验证 android job 的产物。
