@@ -89,6 +89,67 @@ void main() {
       expect(out, contains('<string>Tom &amp; Jerry</string>'));
     });
 
+    test('adds an ATS exception for an http:// url', () {
+      // ATS 默认禁明文，跟 Android 的 usesCleartextTraffic 是一回事：
+      // 不开例外，`pakem build http://…` 构建成功、装上永远白屏。
+      final out = patchInfoPlist(
+        _fixture('Info.plist.in'),
+        _config.copyWith(url: 'http://192.168.1.10:8080'),
+      );
+
+      expect(out, contains('<key>NSAppTransportSecurity</key>'));
+      expect(out, contains('<key>NSAllowsArbitraryLoads</key>'));
+    });
+
+    test('adds no ATS exception for an https:// url', () {
+      final out = patchInfoPlist(_fixture('Info.plist.in'), _config);
+
+      expect(out, isNot(contains('NSAppTransportSecurity')));
+    });
+
+    test('drops the ATS exception when the next build is https', () {
+      final http = patchInfoPlist(
+        _fixture('Info.plist.in'),
+        _config.copyWith(url: 'http://192.168.1.10:8080'),
+      );
+      final https = patchInfoPlist(http, _config);
+
+      expect(https, isNot(contains('NSAppTransportSecurity')));
+      expect(https, contains('<key>UILaunchStoryboardName</key>'));
+    });
+
+    test('is idempotent with an ATS exception in place', () {
+      final config = _config.copyWith(url: 'http://192.168.1.10:8080');
+      final once = patchInfoPlist(_fixture('Info.plist.in'), config);
+
+      expect(patchInfoPlist(once, config), once);
+    });
+
+    test('puts the ATS dict at the ROOT dict, and the permission keys stay '
+        'outside it', () {
+      // ATS 块自带一层 <dict>。插入顺序搞反的话，权限键会被塞进 ATS 内层
+      // 字典里——iOS 直接忽略，设备上崩。
+      final out = patchInfoPlist(
+        _fixture('Info.plist.in'),
+        _config.copyWith(url: 'http://192.168.1.10:8080'),
+      );
+
+      final atsAt = out.indexOf('NSAppTransportSecurity');
+      final permAt = out.indexOf('NSLocationWhenInUseUsageDescription');
+
+      expect(permAt, greaterThan(0));
+      expect(
+        permAt,
+        lessThan(atsAt),
+        reason: 'the permission block must sit before the ATS dict opens',
+      );
+      expect(
+        out.trimRight().endsWith('</dict>\n</plist>'),
+        isTrue,
+        reason: 'the root dict must still close last',
+      );
+    });
+
     test('inserts at the ROOT dict, not the first nested one', () {
       // Permissions must be at root level — iOS ignores them if nested.
       // Fixture has UIApplicationSceneManifest with nested dicts;

@@ -118,6 +118,50 @@ void main() {
       expect(withoutCamera, contains('android.permission.INTERNET'));
     });
 
+    test('opens cleartext traffic for an http:// url', () {
+      // Android 9+ 默认禁明文。不开这个开关，`pakem build http://…` 构建
+      // 成功、装上永远白屏，而报错还会指向「服务器返回了错误」。
+      final out = patchAndroidManifest(
+        _fixture('AndroidManifest.xml.in'),
+        _config.copyWith(url: 'http://192.168.1.10:8080'),
+      );
+
+      expect(out, contains('android:usesCleartextTraffic="true"'));
+    });
+
+    test('leaves cleartext closed for an https:// url', () {
+      final out = patchAndroidManifest(
+        _fixture('AndroidManifest.xml.in'),
+        _config,
+      );
+
+      expect(out, isNot(contains('usesCleartextTraffic')));
+    });
+
+    test('drops the cleartext flag when the next build is https', () {
+      // 固定 workspace 会被复用：上一个 app 是 http、这一个是 https 时，
+      // 不删就把明文开关带进了一个不需要它的 app。
+      final http = patchAndroidManifest(
+        _fixture('AndroidManifest.xml.in'),
+        _config.copyWith(url: 'http://192.168.1.10:8080'),
+      );
+      final https = patchAndroidManifest(http, _config);
+
+      expect(https, isNot(contains('usesCleartextTraffic')));
+    });
+
+    test('the cleartext flag is not duplicated on a second http patch', () {
+      final config = _config.copyWith(url: 'http://192.168.1.10:8080');
+      final once = patchAndroidManifest(
+        _fixture('AndroidManifest.xml.in'),
+        config,
+      );
+      final twice = patchAndroidManifest(once, config);
+
+      expect(twice, once);
+      expect('usesCleartextTraffic'.allMatches(twice).length, 1);
+    });
+
     test('escapes XML-significant characters in the app name', () {
       final out = patchAndroidManifest(
         _fixture('AndroidManifest.xml.in'),
