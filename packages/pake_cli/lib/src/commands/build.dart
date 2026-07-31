@@ -154,7 +154,19 @@ class BuildCommand extends Command<int> {
       );
     });
 
-    _output.success({'app': config.name, 'artifacts': artifacts});
+    // 归档后才报路径：workspace 里的那份下次构建就被覆盖了，交给用户的
+    // 必须是 `~/.pake/out/<app>/` 里那份留得住的。
+    final archived = archiveArtifacts(
+      artifacts: artifacts,
+      workspace: _workspace,
+      appName: config.name,
+    );
+
+    _output.success({
+      'app': config.name,
+      'artifacts': archived,
+      'archivedInto': _workspace.outDirFor(config.name),
+    });
     return 0;
   }
 }

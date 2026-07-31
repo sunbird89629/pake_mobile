@@ -15,7 +15,12 @@ void _write(String path, String content) => File(path)
 /// 从不触碰真实文件系统的假 runner——这些测试要验证的是 `withLock`
 /// 回调里同步 + 物化跑没跑，不是真的调 flutter build。
 class _FakeRunner implements ProcessRunner {
+  _FakeRunner({this.onRun});
+
   final calls = <List<String>>[];
+
+  /// 让用例假装 `flutter build` 落下了产物。
+  final void Function()? onRun;
 
   @override
   Future<ProcessResult> run(
@@ -24,6 +29,7 @@ class _FakeRunner implements ProcessRunner {
     String? workingDirectory,
   }) async {
     calls.add([executable, ...args]);
+    onRun?.call();
     return ProcessResult(0, 0, 'stdout', 'stderr');
   }
 }
@@ -104,6 +110,48 @@ void main() {
 
     // and only after both of the above did the build actually run
     expect(runner.calls, isNotEmpty);
+  });
+
+  test('archives the artifacts into ~/.pake/out/<app>/ and reports those '
+      'paths, not the ones inside the workspace', () async {
+    // workspace 跨 app 复用且 build/ 从不清理：产物在原地被下一次构建覆盖，
+    // 不归档就等于用户什么都没留下。outDirFor 定义了却从来没人调过。
+    const apkName = 'app-arm64-v8a-release.apk';
+    final apkInWorkspace =
+        '${ws.projectDir}/build/app/outputs/flutter-apk/$apkName';
+    final buildingRunner = _FakeRunner(
+      onRun: () => _write(apkInWorkspace, 'apk bytes'),
+    );
+
+    final sink = StringBuffer();
+    final command = BuildCommand(
+      Output(json: true, sink: sink),
+      runner: buildingRunner,
+      workspace: ws,
+      templateDir: templateDir,
+    );
+
+    final code = await runnerFor(command).run([
+      'build',
+      'https://m.weibo.cn',
+      '--name',
+      'Weibo',
+      '--bundle-id',
+      'com.pake.weibo',
+    ]);
+    expect(code, 0);
+
+    final archived = '${ws.outDirFor('Weibo')}/$apkName';
+    expect(
+      File(archived).existsSync(),
+      isTrue,
+      reason: 'the build must leave an archived copy behind',
+    );
+    expect(File(archived).readAsStringSync(), 'apk bytes');
+
+    final json = jsonDecode(sink.toString()) as Map<String, Object?>;
+    expect(json['artifacts'], [archived]);
+    expect(json['archivedInto'], ws.outDirFor('Weibo'));
   });
 
   test('sync + materialize run inside withLock, so a held lock blocks the '

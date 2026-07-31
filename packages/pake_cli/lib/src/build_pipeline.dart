@@ -125,6 +125,25 @@ Future<List<String>> runBuild({
   return artifacts;
 }
 
+/// 把产物归档进 `~/.pake/out/<app>/`，返回归档后的路径。
+///
+/// workspace 是跨 app 复用的单一实例，`build/` 从不清理——每次构建都在原地
+/// 覆盖上一个 app 的 APK。不归档的话用户手上一份历史产物都留不下，而
+/// spec 的固定 workspace 一节写的就是 `~/.pake/out/<app>/  产物归档`。
+List<String> archiveArtifacts({
+  required List<String> artifacts,
+  required Workspace workspace,
+  required String appName,
+}) {
+  final outDir = Directory(workspace.outDirFor(appName))
+    ..createSync(recursive: true);
+
+  return [
+    for (final path in artifacts)
+      File(path).copySync(p.join(outDir.path, p.basename(path))).path,
+  ];
+}
+
 String _writeBuildLog(
   Workspace workspace,
   PakePlatform platform,

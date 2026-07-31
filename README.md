@@ -14,7 +14,11 @@ pakem icon https://m.weibo.cn/favicon.ico
 pakem doctor
 ```
 
-产物在 `~/.pake/workspace/build/`，构建日志在 `~/.pake/logs/`。
+产物归档在 `~/.pake/out/<app>/`，构建日志在 `~/.pake/logs/`。
+
+workspace 是跨 app 复用的单一 Flutter 项目，`~/.pake/workspace/build/` 里那份
+会被下一次构建原地覆盖——`pakem build` 报出来的、也是该拿去装的，是
+`~/.pake/out/<app>/` 里的归档副本。
 
 ## 配置分两层
 
