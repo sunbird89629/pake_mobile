@@ -2548,7 +2548,17 @@ String _lastLines(String text, int count) {
   return lines.sublist(lines.length > count ? lines.length - count : 0).join('\n');
 }
 
-List<String> _collectArtifacts(Workspace workspace, PakePlatform platform) {
+/// 只收本次构建产出的文件。
+///
+/// workspace 是长期复用的，且 `build/` 永不清理（清了自毁增量缓存），
+/// 所以目录里可能残留上一次、甚至另一个 app 的产物。仅按扩展名过滤会把
+/// 它们当成本次结果报给 `--json` 的 agent 调用方——静默给错路径，
+/// 正是这个契约要防的事。
+List<String> _collectArtifacts(
+  Workspace workspace,
+  PakePlatform platform,
+  DateTime startedAt,
+) {
   final dir = switch (platform) {
     PakePlatform.android =>
       Directory(p.join(workspace.projectDir, 'build/app/outputs/flutter-apk')),
@@ -2562,8 +2572,9 @@ List<String> _collectArtifacts(Workspace workspace, PakePlatform platform) {
   return dir
       .listSync()
       .whereType<File>()
+      .where((f) => f.path.endsWith(wanted))
+      .where((f) => !f.lastModifiedSync().isBefore(startedAt))
       .map((f) => f.path)
-      .where((path) => path.endsWith(wanted))
       .toList()
     ..sort();
 }
@@ -2941,7 +2952,8 @@ void materializeConfig({
 
   // 壳在启动时读它作为运行期默认值。
   final assetsDir = Directory(p.join(root, 'assets'))..createSync(recursive: true);
-  File(p.join(assetsDir.path, 'pake.json')).writeAsStringSync(
+  _writeIfChanged(
+    p.join(assetsDir.path, 'pake.json'),
     const JsonEncoder.withIndent('  ').convert(config.toJson()),
   );
 
@@ -2983,11 +2995,23 @@ void _materializeScripts({
 
 void _patchFile(String path, String Function(String) patch) {
   final file = File(path);
-  if (!file.existsSync()) return;
-  final patched = patch(file.readAsStringSync());
-  // 内容没变就不写，保住 Gradle 的 up-to-date 判定。
-  if (file.readAsStringSync() == patched) return;
-  file.writeAsStringSync(patched);
+  // 不能静默返回。路径写错就是「什么都没做且测试全绿」——本项目已有
+  // 两个同签名的 bug。缺文件说明模板同步坏了，必须响亮地失败。
+  if (!file.existsSync()) {
+    throw PakeException(
+      ExitCodes.build,
+      'Expected template file is missing after sync: $path',
+    );
+  }
+  _writeIfChanged(path, patch(file.readAsStringSync()));
+}
+
+/// 内容没变就不写——无谓的 mtime 变化会让 Gradle 判定任务失效，
+/// 而固定 workspace 的全部意义就是保住增量状态。
+void _writeIfChanged(String path, String content) {
+  final file = File(path);
+  if (file.existsSync() && file.readAsStringSync() == content) return;
+  file.writeAsStringSync(content);
 }
 ```
 
