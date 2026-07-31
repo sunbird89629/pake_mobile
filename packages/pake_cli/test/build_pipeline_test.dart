@@ -5,6 +5,7 @@ import 'package:pake_cli/src/output.dart';
 import 'package:pake_cli/src/process_runner.dart';
 import 'package:pake_cli/src/workspace.dart';
 import 'package:pake_config/pake_config.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 class _FakeRunner implements ProcessRunner {
@@ -21,6 +22,27 @@ class _FakeRunner implements ProcessRunner {
   }) async {
     calls.add([executable, ...args]);
     return ProcessResult(0, exitCode, 'stdout', 'stderr');
+  }
+}
+
+/// Simulates what a real `flutter build` does: it drops a fresh artifact
+/// file in the output directory as a side effect of running. Needed to
+/// exercise the mtime filter -- [_FakeRunner] never touches the filesystem.
+class _WritingFakeRunner implements ProcessRunner {
+  _WritingFakeRunner({required this.artifactPath});
+
+  final String artifactPath;
+
+  @override
+  Future<ProcessResult> run(
+    String executable,
+    List<String> args, {
+    String? workingDirectory,
+  }) async {
+    File(artifactPath)
+      ..createSync(recursive: true)
+      ..writeAsStringSync('fresh');
+    return ProcessResult(0, 0, 'stdout', 'stderr');
   }
 }
 
@@ -187,6 +209,37 @@ void main() {
         final logs = Directory(ws.logsDir).listSync();
         expect(logs, isNotEmpty);
         expect(File(logs.first.path).readAsStringSync(), contains('stderr'));
+      },
+    );
+
+    test(
+      'filters out a stale artifact left behind by a previous app\'s build',
+      () async {
+        // Workspace is fixed and reused across different apps, and Task
+        // 10 forbids cleaning build/ between builds (that would destroy
+        // the incremental cache) -- so a stale .apk from a previous app
+        // can still be sitting in the output directory.
+        final apkDir = p.join(ws.projectDir, 'build/app/outputs/flutter-apk');
+        Directory(apkDir).createSync(recursive: true);
+
+        final stalePath = p.join(apkDir, 'old-app-release.apk');
+        File(stalePath).writeAsStringSync('stale');
+        File(stalePath).setLastModifiedSync(
+          DateTime.now().subtract(const Duration(hours: 1)),
+        );
+
+        final freshPath = p.join(apkDir, 'app-release.apk');
+        final runner = _WritingFakeRunner(artifactPath: freshPath);
+
+        final artifacts = await runBuild(
+          config: _config,
+          platforms: [PakePlatform.android],
+          workspace: ws,
+          runner: runner,
+          output: Output(json: true, sink: StringBuffer()),
+        );
+
+        expect(artifacts, [freshPath]);
       },
     );
   });

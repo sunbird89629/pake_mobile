@@ -89,6 +89,11 @@ Future<List<String>> runBuild({
   String? exportOptionsPath,
 }) async {
   final artifacts = <String>[];
+  // Workspace is a single persistent project reused across different apps
+  // and never cleaned between builds (that would destroy the incremental
+  // cache). So `build/` can still hold a *previous* app's .apk/.ipa —
+  // filter by mtime so we never hand back someone else's artifact.
+  final buildStart = DateTime.now();
 
   for (final platform in platforms) {
     output.info('Building ${platform.name}…');
@@ -114,7 +119,7 @@ Future<List<String>> runBuild({
       );
     }
 
-    artifacts.addAll(_collectArtifacts(workspace, platform));
+    artifacts.addAll(_collectArtifacts(workspace, platform, since: buildStart));
   }
 
   return artifacts;
@@ -148,7 +153,18 @@ String _lastLines(String text, int count) {
       .join('\n');
 }
 
-List<String> _collectArtifacts(Workspace workspace, PakePlatform platform) {
+// Some filesystems only keep 1-second mtime resolution, so a file written
+// right at (or just before, after rounding) `since` could otherwise be
+// wrongly discarded. A couple of seconds of slack costs nothing here —
+// stale artifacts from a genuinely earlier build are still minutes/hours
+// old, not a couple of seconds.
+const _mtimeTolerance = Duration(seconds: 2);
+
+List<String> _collectArtifacts(
+  Workspace workspace,
+  PakePlatform platform, {
+  required DateTime since,
+}) {
   final dir = switch (platform) {
     PakePlatform.android => Directory(
       p.join(workspace.projectDir, 'build/app/outputs/flutter-apk'),
@@ -160,10 +176,12 @@ List<String> _collectArtifacts(Workspace workspace, PakePlatform platform) {
 
   if (!dir.existsSync()) return const [];
 
+  final cutoff = since.subtract(_mtimeTolerance);
   final wanted = platform == PakePlatform.android ? '.apk' : '.ipa';
   return dir
       .listSync()
       .whereType<File>()
+      .where((f) => !f.lastModifiedSync().isBefore(cutoff))
       .map((f) => f.path)
       .where((path) => path.endsWith(wanted))
       .toList()
