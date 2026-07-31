@@ -65,4 +65,51 @@ void main() {
       expect(decoded['ok'], isTrue);
     },
   );
+
+  group('runCli exit codes', () {
+    // 退出码分级存在的意义是让 agent 不解析文本就能分支处置。把「你敲错了
+    // 子命令」报成 build(3)，这套分级就作废了——那是用法错，config(1)。
+    test(
+      'a typo\'d subcommand is a config error, not a build failure',
+      () async {
+        final b = _Buffer();
+
+        final code = await runCli(['buidl'], Output(json: true, sink: b));
+
+        expect(code, ExitCodes.config);
+        final error =
+            (jsonDecode(b.buffer.toString()) as Map<String, Object?>)['error']!
+                as Map<String, Object?>;
+        expect(error['exitCode'], ExitCodes.config);
+        expect(error['message'], contains('buidl'));
+      },
+    );
+
+    test('an unknown flag is a config error too', () async {
+      final b = _Buffer();
+
+      final code = await runCli([
+        'init',
+        '--nope',
+      ], Output(json: true, sink: b));
+
+      expect(code, ExitCodes.config);
+    });
+
+    test('a PakeException still reports its own exit code', () async {
+      final b = _Buffer();
+
+      // `pakem icon` 少了参数，命令自己抛 PakeException(config)。
+      final code = await runCli(['icon'], Output(json: true, sink: b));
+
+      expect(code, ExitCodes.config);
+      expect(b.buffer.toString(), contains('needs a path or URL'));
+    });
+
+    test('a successful run exits 0', () async {
+      final code = await runCli(['init'], Output(json: true, sink: _Buffer()));
+
+      expect(code, 0);
+    });
+  });
 }
