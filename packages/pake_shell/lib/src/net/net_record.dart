@@ -55,10 +55,13 @@ class NetRecord {
     }
     // net_hook.js 从来不抓请求头/体（范围有意排除的）——不加这句，导出的
     // 命令看着像一次忠实回放，其实一个请求头都没有。
+    var curl = parts.join(' ');
+    // 换行加注释：macOS 默认交互式 zsh 没开 INTERACTIVE_COMMENTS，同一行
+    // 里的 `#` 不会被当注释，curl 会把后面的词当成额外的 URL 报错。
     if (requestHeaders.isEmpty && (rb == null || rb.isEmpty)) {
-      parts.add('# note: request headers/body were not captured');
+      curl = '$curl\n# note: request headers/body were not captured';
     }
-    return parts.join(' ');
+    return curl;
   }
 }
 

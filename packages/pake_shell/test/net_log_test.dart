@@ -85,13 +85,18 @@ void main() {
       expect(_rec('https://a.com').toCurl(), isNot(contains('--data-raw')));
     });
 
-    test('notes that headers/body were not captured when both are missing', () {
+    test('notes that headers/body were not captured when both are missing, '
+        'on its own line', () {
       // net_hook.js 从不抓请求头/体——不说明的话，导出的命令看着像一次
-      // 忠实回放，其实一个请求头都没有。
-      expect(
-        _rec('https://a.com').toCurl(),
-        contains('# note: request headers/body were not captured'),
-      );
+      // 忠实回放，其实一个请求头都没有。注释必须在自己的一行：macOS 默认
+      // 交互式 zsh 没开 INTERACTIVE_COMMENTS，同一行里的 `#` 不会被当
+      // 注释，粘贴执行会报错。
+      final curl = _rec('https://a.com').toCurl();
+      final lines = curl.split('\n');
+
+      expect(lines, hasLength(2));
+      expect(lines[0], isNot(contains('#')));
+      expect(lines[1], '# note: request headers/body were not captured');
     });
 
     test('says nothing when headers or body were captured', () {
