@@ -9,6 +9,17 @@ import 'package:logger_utils/logger_utils.dart';
 import 'error_page.dart';
 import 'runtime_config.dart';
 
+/// 当前生效脚本集合的稳定 key。
+///
+/// 只看集合内容，跟数量、顺序无关——「关 A 开 B」总数不变，但集合变了，
+/// 必须换出一个新 key 才能强制 `InAppWebView` 的 Element 重建，
+/// 否则 `initialUserScripts` 只在建 Element 时读一次，新脚本组合永远不会生效。
+/// 同一个集合不管传入顺序如何都要给出同一个 key，否则会引发无意义的重建。
+String scriptsKey(Iterable<String> ids) {
+  final sorted = ids.toSet().toList()..sort();
+  return sorted.join('\u0000');
+}
+
 class WebViewPage extends StatefulWidget {
   const WebViewPage({
     super.key,
@@ -27,6 +38,7 @@ class WebViewPageState extends State<WebViewPage> {
   InAppWebViewController? _controller;
   LoadFailureKind? _failure;
   List<UserScript> _scripts = const [];
+  List<String> _scriptIds = const [];
 
   @override
   void initState() {
@@ -38,6 +50,7 @@ class WebViewPageState extends State<WebViewPage> {
   Future<void> _loadScripts() async {
     final enabled = widget.config.enabledScripts;
     final scripts = <UserScript>[];
+    final ids = <String>[];
 
     try {
       final manifest =
@@ -48,6 +61,7 @@ class WebViewPageState extends State<WebViewPage> {
         final id = entry['id']! as String;
         if (!enabled.contains(id)) continue;
 
+        ids.add(id);
         scripts.add(
           UserScript(
             groupName: id,
@@ -63,7 +77,12 @@ class WebViewPageState extends State<WebViewPage> {
       devLogger.warning('no inject scripts loaded: $e');
     }
 
-    if (mounted) setState(() => _scripts = scripts);
+    if (mounted) {
+      setState(() {
+        _scripts = scripts;
+        _scriptIds = ids;
+      });
+    }
   }
 
   /// 开关只在下一次页面加载生效（`WKUserContentController` 的语义），
@@ -99,7 +118,8 @@ class WebViewPageState extends State<WebViewPage> {
     }
 
     return InAppWebView(
-      key: ValueKey(_scripts.length),
+      // 数量相同、内容不同的脚本切换（关 A 开 B）必须换 key，见 scriptsKey 的注释。
+      key: ValueKey(scriptsKey(_scriptIds)),
       initialUrlRequest: URLRequest(url: WebUri(widget.config.url)),
       initialSettings: _settings,
       initialUserScripts: UnmodifiableListView(_scripts),
