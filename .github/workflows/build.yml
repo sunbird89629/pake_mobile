@@ -31,16 +31,16 @@ jobs:
       # CI runner 每次是新环境，必然冷构建。缓存能缓解，
       # 但云构建始终慢于本地——这是物理限制，不是设计缺陷。
       #
-      # `save-always: true` 确保即使后续步骤（Report / Collect）失败，
-      # 1.2GB 的 Gradle 缓存也不会被丢弃——下次运行仍是热构建。
-      # 默认的 `false` 意味着任何一次 job 失败就让缓存报废。
-      - uses: actions/cache@v4
+      # 拆成 restore / save 两步而不是一个 cache 步骤：`save-always`
+      # 已被 GitHub 标记为 deprecated 且「does not work as intended」。
+      # 独立 save + `if: always()` 是推荐替代方案——job 即使失败也会
+      # 保留已下载的 Gradle 依赖，下次运行仍是热构建。
+      - uses: actions/cache/restore@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: gradle-${{ runner.os }}-${{ hashFiles('packages/pake_shell/android/**/*.gradle*') }}
-          save-always: true
 
       # 不走 `dart pub global activate`：它生成的壳脚本会把
       # "Resolving dependencies…" 打到 stdout，混在 `--json` 输出前面，
@@ -116,6 +116,17 @@ jobs:
           path: artifacts/
           # 这条比路径修复更要紧：它让「上传了个空气」这类失败再也藏不住。
           if-no-files-found: error
+
+      # restore 在上面（Build 之前），save 在这里（Build 之后）。
+      # `if: always()` 确保即使 Build / Report / Collect 任何一步失败，
+      # Gradle 缓存也会保留——下次运行不需从头下载 1.2GB 依赖。
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('packages/pake_shell/android/**/*.gradle*') }}
 
   smoke:
     # 不再自己做一次完整 Android 构建——直接验证 android job 的产物。
