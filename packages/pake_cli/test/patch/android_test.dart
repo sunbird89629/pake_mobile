@@ -170,5 +170,25 @@ void main() {
 
       expect(out, contains('android:label="Tom &amp; Jerry &quot;Show&quot;"'));
     });
+
+    test('escapes a leading @ so aapt does not read it as a resource '
+        'reference', () {
+      final out = patchAndroidManifest(
+        _fixture('AndroidManifest.xml.in'),
+        _config.copyWith(name: '@Home'),
+      );
+
+      expect(out, contains(r'android:label="\@Home"'));
+    });
+
+    test('escapes a leading ? so aapt does not read it as a theme '
+        'attribute reference', () {
+      final out = patchAndroidManifest(
+        _fixture('AndroidManifest.xml.in'),
+        _config.copyWith(name: '?App'),
+      );
+
+      expect(out, contains(r'android:label="\?App"'));
+    });
   });
 }

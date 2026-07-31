@@ -81,8 +81,16 @@ String patchAndroidManifest(String original, PakeConfig config) {
   return out.replaceFirst('</manifest>', '$block\n</manifest>');
 }
 
-String _escapeXmlAttribute(String value) => value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
+String _escapeXmlAttribute(String value) {
+  // aapt 把开头的 @ / ? 当资源引用（@string/foo、?attr/bar）解析，不是字面量。
+  // 一个叫 "@Home" 的 app 会在打包期直接报「resource not found」。反斜杠转义
+  // 成字面量是 aapt 的语义，跟下面的 XML 转义无关，所以放在最前面单独处理。
+  final withEscapedLead = value.startsWith('@') || value.startsWith('?')
+      ? '\\$value'
+      : value;
+  return withEscapedLead
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
+}
