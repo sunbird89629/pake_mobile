@@ -16,9 +16,6 @@ dependencies:
   image: ^4.2.0
   pake_config:
     path: ../pake_config
-  logger_utils:
-    git:
-      url: https://github.com/sunbird89629/logger_utils.git
 
 dev_dependencies:
   test: ^1.25.0
