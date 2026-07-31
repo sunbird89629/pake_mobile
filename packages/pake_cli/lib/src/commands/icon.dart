@@ -105,6 +105,42 @@ void writeIosIcons({required List<int> pngBytes, required String projectDir}) {
   }
 }
 
+/// CLI 会覆写的全部图标路径，相对项目根。
+Iterable<String> iconRelativePaths() sync* {
+  for (final density in androidIconSizes.keys) {
+    yield p.join(
+      'android/app/src/main/res',
+      'mipmap-$density',
+      'ic_launcher.png',
+    );
+  }
+  for (final name in iosIconSizes.keys) {
+    yield p.join('ios/Runner/Assets.xcassets/AppIcon.appiconset', name);
+  }
+}
+
+/// 把模板自带的默认图标复制回项目。
+///
+/// 固定 workspace 跨 app 复用且从不清理：先 `--icon` 打了 app A，再不带
+/// `--icon` 打 app B，B 就会带着 A 的图标出厂——没有任何提示。没配图标的
+/// 构建必须显式回到模板的默认图标，而不是「什么都不做」。
+///
+/// 模板里缺某个尺寸时跳过：那说明模板本身就没有这个默认图标，没有可回退
+/// 的目标。真实的 `pake_shell` 是 `flutter create` 出来的，两套图标都齐。
+void restoreTemplateIcons({
+  required String templateDir,
+  required String projectDir,
+}) {
+  for (final relative in iconRelativePaths()) {
+    final source = File(p.join(templateDir, relative));
+    if (!source.existsSync()) continue;
+    _writeBytesIfChanged(
+      File(p.join(projectDir, relative)),
+      source.readAsBytesSync(),
+    );
+  }
+}
+
 /// 只在字节真的变了才写——跟 `materialize.dart` 里字符串版的
 /// `_writeIfChanged` 是同一个道理：图标文件无谓的 mtime 变化会让
 /// Gradle / Xcode 的增量判定失效，固定 workspace 的增量缓存就白搭了。

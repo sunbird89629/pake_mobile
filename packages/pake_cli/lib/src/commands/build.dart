@@ -141,6 +141,7 @@ class BuildCommand extends Command<int> {
         config: config,
         workspace: _workspace,
         cwd: Directory.current.path,
+        templateDir: templateDir,
       );
 
       return runBuild(

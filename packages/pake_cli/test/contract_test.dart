@@ -71,6 +71,7 @@ void main() {
       ),
       workspace: ws,
       cwd: tmp.path,
+      templateDir: templateDir,
     );
 
     // 壳启动时读的两个 asset，原样读回来。
@@ -119,6 +120,7 @@ void main() {
       ),
       workspace: ws,
       cwd: tmp.path,
+      templateDir: templateDir,
     );
 
     final manifest =

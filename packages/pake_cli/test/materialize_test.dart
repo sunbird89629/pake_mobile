@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:image/image.dart' as img;
+import 'package:pake_cli/src/commands/icon.dart';
 import 'package:pake_cli/src/materialize.dart';
 import 'package:pake_cli/src/output.dart';
 import 'package:pake_cli/src/workspace.dart';
@@ -12,6 +13,12 @@ import 'package:test/test.dart';
 void _write(String path, String content) => File(path)
   ..createSync(recursive: true)
   ..writeAsStringSync(content);
+
+/// 模板默认图标的内容，跟测试里用的自定义图标（全黑）必须不同，
+/// 否则「回落到模板图标」和「保留了上一个 app 的图标」看起来一样。
+final templateIconBytes = img.encodePng(
+  img.Image(width: 64, height: 64)..clear(img.ColorRgb8(255, 0, 0)),
+);
 
 void main() {
   late Directory tmp;
@@ -47,6 +54,14 @@ dependencies:
   pake_config:
     path: ../pake_config
 ''');
+
+    // 模板自带的默认图标。真实的 pake_shell 是 `flutter create` 出来的，
+    // 这两套图标一定齐——没配 `--icon` 的构建就该回落到它们。
+    for (final relative in iconRelativePaths()) {
+      File('$templateDir/$relative')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync(templateIconBytes);
+    }
   });
   tearDown(() => tmp.deleteSync(recursive: true));
 
@@ -150,7 +165,12 @@ dependencies:
     );
 
     test('writes assets/pake.json that the shell can read back', () {
-      materializeConfig(config: config, workspace: ws, cwd: tmp.path);
+      materializeConfig(
+        config: config,
+        workspace: ws,
+        cwd: tmp.path,
+        templateDir: templateDir,
+      );
 
       final raw = File('${ws.projectDir}/assets/pake.json').readAsStringSync();
       final restored = PakeConfig.fromJson(
@@ -161,13 +181,85 @@ dependencies:
       expect(restored.name, 'Weibo');
     });
 
+    test('a no-change rebuild rewrites nothing at all', () {
+      // 生产环境每次构建跑的是 syncTemplate + materializeConfig（build.dart）。
+      // 旧测试把 syncTemplate 放进 setUp、只把 materializeConfig 跑两遍，
+      // 测的是生产环境从不会出现的顺序——于是「sync 用模板原始内容盖掉补丁、
+      // materialize 再打一遍写回去」这个每次重建都白写一批文件的问题，
+      // 被一个绿色的幂等性测试完整地遮住了。
+      final withIcon = config.copyWith(
+        injectScripts: ['${tmp.path}/hide-ads.js'],
+      );
+      _write('${tmp.path}/hide-ads.js', 'document.body.remove();');
+
+      void build() {
+        syncTemplate(templateDir: templateDir, projectDir: ws.projectDir);
+        materializeConfig(
+          config: withIcon,
+          workspace: ws,
+          cwd: tmp.path,
+          templateDir: templateDir,
+        );
+      }
+
+      build();
+
+      const stamp = 946684800; // 2000-01-01Z，秒级，避开文件系统精度差异
+      final before = <String, int>{};
+      for (final file in Directory(
+        ws.projectDir,
+      ).listSync(recursive: true).whereType<File>()) {
+        file.setLastModifiedSync(
+          DateTime.fromMillisecondsSinceEpoch(stamp * 1000),
+        );
+        before[file.path] = stamp;
+      }
+
+      build();
+
+      final rewritten = <String>[];
+      for (final file in Directory(
+        ws.projectDir,
+      ).listSync(recursive: true).whereType<File>()) {
+        final was = before[file.path];
+        if (was == null ||
+            file.lastModifiedSync().millisecondsSinceEpoch ~/ 1000 != was) {
+          rewritten.add(p.relative(file.path, from: ws.projectDir));
+        }
+      }
+
+      expect(
+        rewritten,
+        isEmpty,
+        reason:
+            'a rebuild that changes nothing must touch no file — every '
+            'needless mtime bump invalidates Gradle/Xcode up-to-date checks, '
+            'which is the entire point of the fixed workspace',
+      );
+      expect(
+        before.keys,
+        isNotEmpty,
+        reason: 'guard against the assertion above passing vacuously',
+      );
+    });
+
     test('does not rewrite assets/pake.json when the config is unchanged', () {
-      materializeConfig(config: config, workspace: ws, cwd: tmp.path);
+      materializeConfig(
+        config: config,
+        workspace: ws,
+        cwd: tmp.path,
+        templateDir: templateDir,
+      );
       final file = File('${ws.projectDir}/assets/pake.json');
       final stamp = DateTime(2000);
       file.setLastModifiedSync(stamp);
 
-      materializeConfig(config: config, workspace: ws, cwd: tmp.path);
+      materializeConfig(
+        config: config,
+        workspace: ws,
+        cwd: tmp.path,
+        templateDir: templateDir,
+      );
 
       expect(
         file.lastModifiedSync(),
@@ -179,12 +271,18 @@ dependencies:
     });
 
     test(
-      'throws with the missing path when a template file did not survive sync',
+      'throws with the missing path when the template lacks a patch target',
       () {
-        File('${ws.projectDir}/android/app/build.gradle.kts').deleteSync();
+        // 补丁的输入是模板里的原始内容，所以缺角要看模板，不是 workspace。
+        File('$templateDir/android/app/build.gradle.kts').deleteSync();
 
         expect(
-          () => materializeConfig(config: config, workspace: ws, cwd: tmp.path),
+          () => materializeConfig(
+            config: config,
+            workspace: ws,
+            cwd: tmp.path,
+            templateDir: templateDir,
+          ),
           throwsA(
             isA<PakeException>()
                 .having((e) => e.exitCode, 'exitCode', ExitCodes.build)
@@ -205,10 +303,15 @@ dependencies:
       // 跑哪个 `flutter build`，不代表 workspace 里可以缺一棵子树。
       // 模板缺角说明模板安装坏了，materializeConfig 不区分请求的平台，
       // 该炸就炸，不能因为这次只打 android 就悄悄放过。
-      Directory('${ws.projectDir}/ios').deleteSync(recursive: true);
+      Directory('$templateDir/ios').deleteSync(recursive: true);
 
       expect(
-        () => materializeConfig(config: config, workspace: ws, cwd: tmp.path),
+        () => materializeConfig(
+          config: config,
+          workspace: ws,
+          cwd: tmp.path,
+          templateDir: templateDir,
+        ),
         throwsA(
           isA<PakeException>().having(
             (e) => e.exitCode,
@@ -220,7 +323,12 @@ dependencies:
     });
 
     test('patches gradle, manifest, plist and pbxproj', () {
-      materializeConfig(config: config, workspace: ws, cwd: tmp.path);
+      materializeConfig(
+        config: config,
+        workspace: ws,
+        cwd: tmp.path,
+        templateDir: templateDir,
+      );
 
       expect(
         File(
@@ -253,6 +361,7 @@ dependencies:
         config: config.copyWith(injectScripts: ['${tmp.path}/hide-ads.js']),
         workspace: ws,
         cwd: tmp.path,
+        templateDir: templateDir,
       );
 
       final out = File(
@@ -276,12 +385,60 @@ dependencies:
       _write('${ws.projectDir}/assets/scripts/old.js', 'stale');
       _write('${ws.projectDir}/assets/scripts/index.json', '[{"id":"old"}]');
 
-      materializeConfig(config: config, workspace: ws, cwd: tmp.path);
+      materializeConfig(
+        config: config,
+        workspace: ws,
+        cwd: tmp.path,
+        templateDir: templateDir,
+      );
 
       expect(
         File('${ws.projectDir}/assets/scripts/old.js').existsSync(),
         isFalse,
       );
+    });
+
+    test('a build without --icon gets the template icons back, not the '
+        'previous app\'s', () {
+      // workspace 跨 app 复用且从不清理。先带 --icon 打 app A，再不带
+      // --icon 打 app B——B 会悄无声息地带着 A 的图标出厂。
+      final iconPath = '${tmp.path}/icon.png';
+      File(
+        iconPath,
+      ).writeAsBytesSync(img.encodePng(img.Image(width: 512, height: 512)));
+
+      // 必须按生产环境的真实顺序重放：每次构建都是 syncTemplate +
+      // materializeConfig。少了 syncTemplate，测的就是另一条代码路径。
+      void build(PakeConfig c) {
+        syncTemplate(templateDir: templateDir, projectDir: ws.projectDir);
+        materializeConfig(
+          config: c,
+          workspace: ws,
+          cwd: tmp.path,
+          templateDir: templateDir,
+        );
+      }
+
+      build(config.copyWith(iconPath: iconPath));
+
+      final anAndroidIcon = File(
+        '${ws.projectDir}/android/app/src/main/res/mipmap-mdpi/ic_launcher.png',
+      );
+      expect(
+        anAndroidIcon.readAsBytesSync(),
+        isNot(templateIconBytes),
+        reason: 'app A really did install its own icon',
+      );
+
+      build(config);
+
+      for (final relative in iconRelativePaths()) {
+        expect(
+          File('${ws.projectDir}/$relative').readAsBytesSync(),
+          templateIconBytes,
+          reason: '$relative still carries the previous app\'s icon',
+        );
+      }
     });
 
     test(
@@ -293,7 +450,12 @@ dependencies:
         ).writeAsBytesSync(img.encodePng(img.Image(width: 512, height: 512)));
         final withIcon = config.copyWith(iconPath: iconPath);
 
-        materializeConfig(config: withIcon, workspace: ws, cwd: tmp.path);
+        materializeConfig(
+          config: withIcon,
+          workspace: ws,
+          cwd: tmp.path,
+          templateDir: templateDir,
+        );
 
         // 内容相等的断言在新旧实现下都会通过——真正证明「没有重写」的
         // 只能是 mtime 或写入次数，跟 pake.json 的幂等性测试同一个道理。
@@ -308,7 +470,12 @@ dependencies:
         androidIcon.setLastModifiedSync(stamp);
         iosIcon.setLastModifiedSync(stamp);
 
-        materializeConfig(config: withIcon, workspace: ws, cwd: tmp.path);
+        materializeConfig(
+          config: withIcon,
+          workspace: ws,
+          cwd: tmp.path,
+          templateDir: templateDir,
+        );
 
         expect(
           androidIcon.lastModifiedSync(),

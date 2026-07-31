@@ -24,6 +24,37 @@ const _cacheDirs = {
   '.symlinks',
 };
 
+/// `materializeConfig` 会从模板原始内容重新生成的四个补丁目标。
+const _patchTargets = [
+  'android/app/build.gradle.kts',
+  'android/app/src/main/AndroidManifest.xml',
+  'ios/Runner/Info.plist',
+  'ios/Runner.xcodeproj/project.pbxproj',
+];
+
+/// 这条路径归 `materializeConfig` 管，`syncTemplate` 必须绕开。
+///
+/// 两个函数在每次构建里连着跑。sync 拿 workspace 里**已经打过补丁**的文件
+/// 跟模板的原始文件比，两者永远不相等，于是把补丁覆盖掉；紧接着
+/// materializeConfig 再打一遍补丁写回去。结果是每次「什么都没改」的重建都
+/// 有一批文件被写入字节完全相同的内容——`_writeIfChanged` 从来没有真正生效
+/// 过，而幂等性测试却是绿的，因为它把 syncTemplate 放进 setUp，测的是生产
+/// 环境从不会跑的调用顺序。
+///
+/// 划清归属之后，补丁永远从干净的模板内容开始打（不会跨次构建累积漂移），
+/// `_writeIfChanged` 也终于有事可做。
+bool _ownedByMaterialize(String relative) {
+  final parts = p.split(relative);
+  if (_patchTargets.any((t) => t == p.joinAll(parts))) return true;
+
+  // pake.json 与 assets/scripts/ 整棵子树都是物化产物；图标要么由 --icon
+  // 写入，要么由 restoreTemplateIcons 从模板取回，两条路都归 materialize。
+  if (parts.length >= 2 && parts.first == 'assets') {
+    return parts[1] == 'pake.json' || parts[1] == 'scripts';
+  }
+  return iconRelativePaths().contains(p.joinAll(parts));
+}
+
 /// 幂等地把模板同步进固定 workspace：只覆写会变的文件，其余不动。
 void syncTemplate({required String templateDir, required String projectDir}) {
   final template = Directory(templateDir);
@@ -42,6 +73,7 @@ void syncTemplate({required String templateDir, required String projectDir}) {
 
     final relative = p.relative(entity.path, from: templateDir);
     if (p.split(relative).any(_cacheDirs.contains)) continue;
+    if (_ownedByMaterialize(relative)) continue;
 
     final target = File(p.join(projectDir, relative));
     target.parent.createSync(recursive: true);
@@ -87,29 +119,38 @@ bool _bytesEqual(List<int> a, List<int> b) {
 }
 
 /// 把配置物化进已同步的 workspace。
+///
+/// [templateDir] 是 `syncTemplate` 用的同一个模板目录：没配图标时要从这里
+/// 取回默认图标。
 void materializeConfig({
   required PakeConfig config,
   required Workspace workspace,
   required String cwd,
+  required String templateDir,
 }) {
   final root = workspace.projectDir;
 
-  _patchFile(
-    p.join(root, 'android/app/build.gradle.kts'),
-    (s) => patchBuildGradle(s, config),
+  final patches = <String, String Function(String)>{
+    'android/app/build.gradle.kts': (s) => patchBuildGradle(s, config),
+    'android/app/src/main/AndroidManifest.xml': (s) =>
+        patchAndroidManifest(s, config),
+    'ios/Runner/Info.plist': (s) => patchInfoPlist(s, config),
+    'ios/Runner.xcodeproj/project.pbxproj': (s) => patchPbxproj(s, config),
+  };
+  assert(
+    patches.keys.every(_patchTargets.contains) &&
+        patches.length == _patchTargets.length,
+    'syncTemplate skips exactly _patchTargets — the two lists must agree, '
+    'or a target either never gets synced or gets its patch overwritten',
   );
-  _patchFile(
-    p.join(root, 'android/app/src/main/AndroidManifest.xml'),
-    (s) => patchAndroidManifest(s, config),
-  );
-  _patchFile(
-    p.join(root, 'ios/Runner/Info.plist'),
-    (s) => patchInfoPlist(s, config),
-  );
-  _patchFile(
-    p.join(root, 'ios/Runner.xcodeproj/project.pbxproj'),
-    (s) => patchPbxproj(s, config),
-  );
+  for (final entry in patches.entries) {
+    _patchFromTemplate(
+      templateDir: templateDir,
+      projectDir: root,
+      relative: entry.key,
+      patch: entry.value,
+    );
+  }
 
   // 壳在启动时读它作为运行期默认值。
   final assetsDir = Directory(p.join(root, 'assets'))
@@ -129,6 +170,9 @@ void materializeConfig({
     ).readAsBytesSync();
     writeAndroidIcons(pngBytes: bytes, projectDir: root);
     writeIosIcons(pngBytes: bytes, projectDir: root);
+  } else {
+    // 没配图标 ≠ 什么都不做：workspace 里可能还留着上一个 app 的图标。
+    restoreTemplateIcons(templateDir: templateDir, projectDir: root);
   }
 }
 
@@ -137,12 +181,14 @@ void _materializeScripts({
   required String root,
   required String cwd,
 }) {
-  final dir = Directory(p.join(root, 'assets/scripts'));
-  // 先清空：上一次构建的脚本若留在这里，会被 UserScript 一并注入。
-  if (dir.existsSync()) dir.deleteSync(recursive: true);
-  dir.createSync(recursive: true);
+  final dir = Directory(p.join(root, 'assets/scripts'))
+    ..createSync(recursive: true);
 
   final manifest = <Map<String, Object?>>[];
+  // 这一轮该留在目录里的文件。其余的都是上一次构建的残留——留着会被
+  // UserScript 一并注入。
+  final wanted = <String>{'index.json'};
+
   for (final rawPath in config.injectScripts) {
     final source = File(p.isAbsolute(rawPath) ? rawPath : p.join(cwd, rawPath));
     if (!source.existsSync()) {
@@ -156,14 +202,26 @@ void _materializeScripts({
       path: source.path,
       content: source.readAsStringSync(),
     );
-    File(p.join(dir.path, '${script.id}.js')).writeAsStringSync(script.source);
+    final name = '${script.id}.js';
+    wanted.add(name);
+    // 整个目录 delete 再重写，等于每次构建都刷新一批 mtime——跟 pake.json
+    // 和四个补丁目标一样走 _writeIfChanged，只删真正多余的文件。
+    _writeIfChanged(File(p.join(dir.path, name)), script.source);
     manifest.add({'id': script.id, 'kind': script.kind.name});
   }
 
-  File(p.join(dir.path, 'index.json')).writeAsStringSync(jsonEncode(manifest));
+  _writeIfChanged(File(p.join(dir.path, 'index.json')), jsonEncode(manifest));
+
+  for (final stale in dir.listSync().whereType<File>()) {
+    if (!wanted.contains(p.basename(stale.path))) stale.deleteSync();
+  }
 }
 
-/// 把 [patch] 套到模板同步已经落地的文件上。
+/// 从**模板**里取原始内容，打上 [patch]，写进 workspace。
+///
+/// 读模板而不是读 workspace：workspace 里那份已经打过补丁了，拿它当输入意味
+/// 着补丁叠补丁，跨次构建可能积累漂移；而且 syncTemplate 已经不再同步这些
+/// 路径，workspace 里的那份在第一次构建时压根不存在。
 ///
 /// 缺文件时**必须报错**，不能悄悄跳过：Task 10 的踩坑记录显示，
 /// 一旦这四个路径与真实 `flutter create` 输出有一丝出入（比如
@@ -171,17 +229,23 @@ void _materializeScripts({
 /// app 名的配置从未落地，构建照样成功，只是壳里装的是错的应用——
 /// 而且这个失败模式不会被任何测试捕获，因为测试用的是同一套假设
 /// 搭出来的模板树。宁可在这里让构建炸掉，报出具体缺哪个文件。
-void _patchFile(String path, String Function(String) patch) {
-  final file = File(path);
-  if (!file.existsSync()) {
+void _patchFromTemplate({
+  required String templateDir,
+  required String projectDir,
+  required String relative,
+  required String Function(String) patch,
+}) {
+  final source = File(p.join(templateDir, relative));
+  if (!source.existsSync()) {
     throw PakeException(
       ExitCodes.build,
-      'Expected template file missing after sync: $path',
+      'Expected template file missing: ${source.path}',
     );
   }
-  final original = file.readAsStringSync();
-  // 已经读过一次原内容了，直接传进去比对，不必让 _writeIfChanged 再读一遍。
-  _writeIfChanged(file, patch(original), current: original);
+  _writeIfChanged(
+    File(p.join(projectDir, relative)),
+    patch(source.readAsStringSync()),
+  );
 }
 
 /// 只在内容真的变了才写——无谓的 mtime 变化会让 Gradle 的 up-to-date
