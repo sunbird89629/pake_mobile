@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'escape_hatch.dart';
 import 'runtime_config.dart';
 import 'webview_page.dart';
 
@@ -31,7 +32,7 @@ class _PakeAppState extends State<PakeApp> {
             config: widget.config,
             onOpenSettings: _openSettings,
           ),
-          // Task 14 会在这里加 EscapeHatch。
+          EscapeHatch(onTriggered: _openSettings),
         ],
       ),
     );
