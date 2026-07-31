@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:pake_config/pake_config.dart';
 
 import 'log_page.dart';
+import 'net/net_log.dart';
+import 'net/net_log_page.dart';
 import 'runtime_config.dart';
 
 const _customLabel = 'Custom…';
@@ -27,12 +29,17 @@ class DebugDrawer extends StatefulWidget {
     required this.config,
     required this.onReloadRequested,
     required this.onClearCache,
+    required this.netLog,
     this.logsDir,
   });
 
   final RuntimeConfig config;
   final VoidCallback onReloadRequested;
   final Future<void> Function() onClearCache;
+
+  /// WebView 抓的网络请求，来自 `WebViewPageState.netLog`——「View requests」
+  /// 页面直接读它。
+  final NetLog netLog;
 
   /// `logger_utils` 的日志落盘目录，由 `main.dart` 用 `path_provider` 算出来
   /// 再一路传下来。测试里不传——用不到「View logs」的场景不需要它。
@@ -160,6 +167,15 @@ class _DebugDrawerState extends State<DebugDrawer> {
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => LogPage(logsDir: widget.logsDir),
+              ),
+            ),
+          ),
+          ListTile(
+            title: const Text('View requests'),
+            leading: const Icon(Icons.swap_vert),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => NetLogPage(log: widget.netLog),
               ),
             ),
           ),

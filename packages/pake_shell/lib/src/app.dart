@@ -29,6 +29,7 @@ class _PakeAppState extends State<PakeApp> {
         builder: (_) => DebugDrawer(
           config: widget.config,
           logsDir: widget.logsDir,
+          netLog: _webViewKey.currentState!.netLog,
           onReloadRequested: () =>
               _webViewKey.currentState?.reloadWithCurrentSettings(),
           onClearCache: () async {

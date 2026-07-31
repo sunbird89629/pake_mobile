@@ -7,6 +7,8 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:logger_utils/logger_utils.dart';
 
 import 'error_page.dart';
+import 'net/net_log.dart';
+import 'net/net_record.dart';
 import 'runtime_config.dart';
 
 /// 当前生效脚本集合的稳定 key。
@@ -40,10 +42,21 @@ class WebViewPageState extends State<WebViewPage> {
   List<UserScript> _scripts = const [];
   List<String> _scriptIds = const [];
 
+  /// 两个互补的抓包来源汇合到这——JS hook（有 body）与 onLoadResource
+  /// （只有 URL/时序）都往这里 add。`DebugDrawer` 的「View requests」经
+  /// `GlobalKey<WebViewPageState>` 读它。
+  final netLog = NetLog();
+
   @override
   void initState() {
     super.initState();
     _loadScripts();
+  }
+
+  @override
+  void dispose() {
+    netLog.dispose();
+    super.dispose();
   }
 
   /// 读构建期物化出的脚本清单，按运行期开关过滤。
@@ -76,6 +89,17 @@ class WebViewPageState extends State<WebViewPage> {
     } catch (e) {
       devLogger.warning('no inject scripts loaded: $e');
     }
+
+    // 网络抓包 hook 必须排在用户脚本之前、AT_DOCUMENT_START 注入，
+    // 否则页面早期发的请求就漏抓了。
+    scripts.insert(
+      0,
+      UserScript(
+        groupName: '__pake_net_hook',
+        source: await rootBundle.loadString('assets/net_hook.js'),
+        injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+      ),
+    );
 
     if (mounted) {
       setState(() {
@@ -123,7 +147,28 @@ class WebViewPageState extends State<WebViewPage> {
       initialUrlRequest: URLRequest(url: WebUri(widget.config.url)),
       initialSettings: _settings,
       initialUserScripts: UnmodifiableListView(_scripts),
-      onWebViewCreated: (c) => _controller = c,
+      onWebViewCreated: (c) {
+        _controller = c;
+        c.addJavaScriptHandler(
+          handlerName: 'pakeNet',
+          callback: (args) {
+            if (args.isEmpty || args.first is! Map) return;
+            netLog.add(
+              NetRecord.fromHandlerJson(args.first as Map<Object?, Object?>),
+            );
+          },
+        );
+      },
+      onLoadResource: (_, resource) => netLog.add(
+        NetRecord(
+          url: resource.url?.toString() ?? '',
+          method: 'GET',
+          status: 0,
+          durationMs: resource.duration?.round() ?? 0,
+          at: DateTime.now(),
+          source: NetSource.resource,
+        ),
+      ),
       onConsoleMessage: (_, msg) => devLogger.info('[console] ${msg.message}'),
       onReceivedError: (_, _, error) {
         devLogger.severe('load error: ${error.type} ${error.description}');

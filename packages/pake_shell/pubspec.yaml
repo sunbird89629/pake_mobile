@@ -68,6 +68,7 @@ flutter:
   assets:
     - assets/pake.json
     - assets/scripts/
+    - assets/net_hook.js
 
   # To add assets to your application, add an assets section, like this:
   # assets:

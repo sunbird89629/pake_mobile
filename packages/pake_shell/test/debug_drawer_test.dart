@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:pake_config/pake_config.dart';
 import 'package:pake_shell/src/debug_drawer.dart';
+import 'package:pake_shell/src/net/net_log.dart';
 import 'package:pake_shell/src/runtime_config.dart';
 
 const _buildTime = PakeConfig(
@@ -43,6 +44,7 @@ void main() {
         config: config,
         onReloadRequested: () => reloadCount++,
         onClearCache: () async {},
+        netLog: NetLog(),
       ),
     ),
   );
@@ -117,6 +119,12 @@ void main() {
       config.url = 'https://changed.example.com';
       await pump(tester);
 
+      // 加了「View requests」入口后，Reset 这一项被挤出默认视口的懒加载
+      // 缓存区，得先滚到可见再点。
+      await tester.scrollUntilVisible(
+        find.text('Reset to build defaults'),
+        200,
+      );
       await tester.tap(find.text('Reset to build defaults'));
       await tester.pumpAndSettle();
 
