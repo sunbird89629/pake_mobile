@@ -17,12 +17,24 @@ jobs:
 
       - name: pake_config
         working-directory: packages/pake_config
-        run: dart pub get && dart test
+        run: |
+          dart pub get
+          dart analyze
+          dart format --set-exit-if-changed .
+          dart test
 
       - name: pake_cli
         working-directory: packages/pake_cli
-        run: dart pub get && dart test
+        run: |
+          dart pub get
+          dart analyze
+          dart format --set-exit-if-changed .
+          dart test
 
       - name: pake_shell
         working-directory: packages/pake_shell
-        run: flutter pub get && flutter test
+        run: |
+          flutter pub get
+          flutter analyze
+          dart format --set-exit-if-changed .
+          flutter test

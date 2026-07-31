@@ -48,10 +48,22 @@ jobs:
             --platform android \
             --json
 
+      # upload-artifact 的 glob 不展开 `~`，会把它当成字面目录名，于是什么
+      # 都匹配不到；再加上 `if-no-files-found` 默认只是 warn，job 就绿着结束
+      # 而一个文件都没上传。先在 shell 里（`$HOME` 会展开）把归档产物收拢到
+      # github.workspace 下，再用相对路径上传。
+      - name: Collect archived artifacts
+        run: |
+          mkdir -p artifacts
+          cp -R "$HOME"/.pake/out/*/. artifacts/
+          ls -l artifacts
+
       - uses: actions/upload-artifact@v4
         with:
           name: apk
-          path: ~/.pake/workspace/build/app/outputs/flutter-apk/*.apk
+          path: artifacts/
+          # 这条比路径修复更要紧：它让「上传了个空气」这类失败再也藏不住。
+          if-no-files-found: error
 
   smoke:
     runs-on: ubuntu-latest
