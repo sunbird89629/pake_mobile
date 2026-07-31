@@ -12,6 +12,8 @@ executables:
 dependencies:
   args: ^2.5.0
   path: ^1.9.0
+  http: ^1.2.0
+  image: ^4.2.0
   pake_config:
     path: ../pake_config
   logger_utils:

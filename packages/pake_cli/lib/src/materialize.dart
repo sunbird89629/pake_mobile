@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:pake_config/pake_config.dart';
 import 'package:path/path.dart' as p;
 
+import 'commands/icon.dart';
 import 'output.dart';
 import 'patch/android.dart';
 import 'patch/ios.dart';
@@ -79,6 +80,16 @@ void materializeConfig({
   );
 
   _materializeScripts(config: config, root: root, cwd: cwd);
+
+  // 同步函数只支持本地路径——远程 URL 抓取是异步的，走 `pakem icon` 单独命令。
+  final icon = config.iconPath;
+  if (icon != null) {
+    final bytes = File(
+      p.isAbsolute(icon) ? icon : p.join(cwd, icon),
+    ).readAsBytesSync();
+    writeAndroidIcons(pngBytes: bytes, projectDir: root);
+    writeIosIcons(pngBytes: bytes, projectDir: root);
+  }
 }
 
 void _materializeScripts({

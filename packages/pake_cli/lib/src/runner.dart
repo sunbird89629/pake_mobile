@@ -2,10 +2,10 @@ import 'package:args/command_runner.dart';
 
 import 'commands/build.dart';
 import 'commands/doctor.dart';
+import 'commands/icon.dart';
 import 'commands/init.dart';
 import 'output.dart';
 
-/// 后续任务用 `addCommand` 往这里挂 icon。
 CommandRunner<int> buildRunner(Output output) {
   return CommandRunner<int>('pakem', 'Build any web page into a mobile app.')
     ..argParser.addFlag(
@@ -15,5 +15,6 @@ CommandRunner<int> buildRunner(Output output) {
     )
     ..addCommand(InitCommand(output))
     ..addCommand(BuildCommand(output))
-    ..addCommand(DoctorCommand(output));
+    ..addCommand(DoctorCommand(output))
+    ..addCommand(IconCommand(output));
 }
