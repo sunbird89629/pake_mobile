@@ -53,6 +53,11 @@ class NetRecord {
     if (rb != null && rb.isNotEmpty) {
       parts.add("--data-raw '${_shellEscape(rb)}'");
     }
+    // net_hook.js 从来不抓请求头/体（范围有意排除的）——不加这句，导出的
+    // 命令看着像一次忠实回放，其实一个请求头都没有。
+    if (requestHeaders.isEmpty && (rb == null || rb.isEmpty)) {
+      parts.add('# note: request headers/body were not captured');
+    }
     return parts.join(' ');
   }
 }

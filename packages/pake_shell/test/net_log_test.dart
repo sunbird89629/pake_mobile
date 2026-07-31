@@ -84,6 +84,29 @@ void main() {
     test('omits the data flag for GET requests without a body', () {
       expect(_rec('https://a.com').toCurl(), isNot(contains('--data-raw')));
     });
+
+    test('notes that headers/body were not captured when both are missing', () {
+      // net_hook.js 从不抓请求头/体——不说明的话，导出的命令看着像一次
+      // 忠实回放，其实一个请求头都没有。
+      expect(
+        _rec('https://a.com').toCurl(),
+        contains('# note: request headers/body were not captured'),
+      );
+    });
+
+    test('says nothing when headers or body were captured', () {
+      final curl = NetRecord(
+        url: 'https://api.example.com/v1/items?q=1',
+        method: 'POST',
+        status: 201,
+        durationMs: 40,
+        at: DateTime(2026, 7, 30),
+        requestHeaders: const {'Content-Type': 'application/json'},
+        requestBody: '{"a":1}',
+      ).toCurl();
+
+      expect(curl, isNot(contains('# note:')));
+    });
   });
 
   group('NetRecord.fromHandlerJson', () {
