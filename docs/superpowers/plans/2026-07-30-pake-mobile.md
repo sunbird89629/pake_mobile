@@ -4023,6 +4023,11 @@ class WebViewPageState extends State<WebViewPage> {
     if (mounted) setState(() => _failure = null);
   }
 
+  /// 纯函数，可单测：同一组脚本恒定，换掉其中一个就变。
+  /// enabledScripts 是 Set，必须先排序，否则迭代顺序会造成无谓重建。
+  String get _scriptSetKey =>
+      (_scripts.map((s) => s.groupName ?? '').toList()..sort()).join('|');
+
   InAppWebViewSettings get _settings => InAppWebViewSettings(
         userAgent: widget.config.userAgent,
         javaScriptEnabled: true,
@@ -4045,7 +4050,10 @@ class WebViewPageState extends State<WebViewPage> {
     }
 
     return InAppWebView(
-      key: ValueKey(_scripts.length),
+      // key 必须由脚本**内容**派生，不能用数量。关掉 A、打开 B 时数量不变，
+      // Element 被复用，而 initialUserScripts 只在原生视图创建时读一次——
+      // reload 会正常返回但什么都没应用。设置页拨开关正是这个场景。
+      key: ValueKey(_scriptSetKey),
       initialUrlRequest: URLRequest(url: WebUri(widget.config.url)),
       initialSettings: _settings,
       initialUserScripts: UnmodifiableListView(_scripts),
