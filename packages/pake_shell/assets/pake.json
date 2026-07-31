@@ -1,0 +1,9 @@
+{
+  "name": "Pake Shell Dev",
+  "url": "https://example.com",
+  "bundleId": "com.example.pake_shell",
+  "version": "1.0.0",
+  "buildNumber": 1,
+  "injectScripts": [],
+  "permissions": []
+}
