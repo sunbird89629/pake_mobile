@@ -37,8 +37,13 @@ jobs:
             ~/.gradle/wrapper
           key: gradle-${{ runner.os }}-${{ hashFiles('packages/pake_shell/android/**/*.gradle*') }}
 
-      - name: Install pakem
-        run: dart pub global activate --source path packages/pake_cli
+      # 不走 `dart pub global activate`：它生成的壳脚本会把
+      # "Resolving dependencies…" 打到 stdout，混在 `--json` 输出前面，
+      # 下游 jq/agent 直接解析失败。`dart run` 从包目录跑，依赖已解析，
+      # stdout 只有 JSON 对象本身。
+      - name: Install CLI dependencies
+        working-directory: packages/pake_cli
+        run: dart pub get
 
       # 密钥写到 `~/.pake/signing.properties`——和本地构建同一个约定，
       # `pake_shell/android/app/build.gradle.kts` 只认这一个位置。
@@ -70,15 +75,16 @@ jobs:
           EOF
 
       - name: Build
+        working-directory: packages/pake_cli
         # runner 默认是 `bash -e`，不开 pipefail：不加这句，pakem 失败也会被
         # tee 的退出码盖住，job 绿着结束而 build.json 里是半截输出。
         run: |
           set -o pipefail
-          pakem build "${{ inputs.url }}" \
+          dart run bin/pakem.dart build "${{ inputs.url }}" \
             --name "${{ inputs.name }}" \
             --bundle-id "${{ inputs.bundle_id }}" \
             --platform android \
-            --json | tee build.json
+            --json | tee "$GITHUB_WORKSPACE/build.json"
           echo
 
       - name: Report signing
