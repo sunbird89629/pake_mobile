@@ -48,6 +48,19 @@ void main() {
       );
     });
 
+    test('rewrites CFBundleName too, not just the display name', () {
+      // CFBundleName 不改的话还留着 flutter create 的默认值 pake_shell——
+      // 有些 iOS 设置页（后台刷新、通知列表）读的是它，不是 CFBundleDisplayName。
+      final out = patchInfoPlist(_fixture('Info.plist.in'), _config);
+
+      expect(
+        out,
+        contains('''
+	<key>CFBundleName</key>
+	<string>Weibo</string>'''),
+      );
+    });
+
     test('leaves version keys on the xcode build variables', () {
       // 版本号经 `flutter build --build-name/--build-number` 传入，
       // 直接改 plist 反而会和 Flutter 工具链打架。

@@ -20,6 +20,13 @@ String patchInfoPlist(String original, PakeConfig config) {
     (m) => '${m[1]}${_escapeXmlText(config.name)}${m[2]}',
   );
 
+  // CFBundleName 不改的话还留着 flutter create 的默认值 pake_shell——
+  // iOS 有些设置页（比如后台刷新、通知列表）读它而不是 CFBundleDisplayName。
+  out = out.replaceFirstMapped(
+    RegExp(r'(<key>CFBundleName</key>\s*\n\s*<string>)[^<]*(</string>)'),
+    (m) => '${m[1]}${_escapeXmlText(config.name)}${m[2]}',
+  );
+
   final permissions = [
     _permsBegin,
     for (final p in config.permissions) ...[
