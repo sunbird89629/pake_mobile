@@ -12,9 +12,14 @@ class EscapeHatch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // top 必须是状态栏 inset 而不是 0：app 边到边绘制，状态栏区域仍然
+    // 会吃掉触摸事件（真机上长按会拉下通知栏而不是打开设置）。钉在物理
+    // 0 会让整个 44×44 都盖在状态栏底下，长按永远摸不到这个手势区，
+    // 网页白屏时用户就再也进不了设置——不要把这一行"简化"回 0。
+    final statusBarHeight = MediaQuery.of(context).padding.top;
     return Positioned(
       left: 0,
-      top: 0,
+      top: statusBarHeight,
       // GestureDetector.onLongPress 写死 500ms，太容易误触，
       // 所以这里下沉到 RawGestureDetector 自定义时长。
       child: RawGestureDetector(

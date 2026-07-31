@@ -126,6 +126,28 @@ void main() {
     expect(box.topLeft, Offset.zero);
   });
 
+  testWidgets('it sits below the status bar inset instead of under it', (
+    tester,
+  ) async {
+    // 真机上系统状态栏会吞掉这块区域内的触摸（下拉通知栏），
+    // 44×44 必须整体挪到 padding.top 以下才摸得到。
+    const statusBarHeight = 132.0;
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          padding: EdgeInsets.only(top: statusBarHeight),
+        ),
+        child: MaterialApp(
+          home: Stack(children: [EscapeHatch(onTriggered: () {})]),
+        ),
+      ),
+    );
+
+    final box = tester.getRect(find.byType(EscapeHatch));
+
+    expect(box.topLeft, const Offset(0, statusBarHeight));
+  });
+
   testWidgets('a press outside the corner does not trigger it', (tester) async {
     var count = 0;
     await tester.pumpWidget(
