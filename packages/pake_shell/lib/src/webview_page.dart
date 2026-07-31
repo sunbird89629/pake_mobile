@@ -144,9 +144,10 @@ class WebViewPageState extends State<WebViewPage> {
       );
     }
 
-    // 不包 SafeArea 的话网页会画到状态栏和刘海底下，每个站点的顶部导航
-    // 都压在时钟下面。`ErrorPage` 一直是包着的，这里是那条不对称。
-    return SafeArea(child: _webView);
+    // WebView 需要铺满全屏（见设计文档的 全屏 运行时开关），不能像
+    // `ErrorPage` 那样包 SafeArea——那会让内容避开刘海/底部安全区，
+    // 并在横屏或全屏播放视频时产生黑边。
+    return _webView;
   }
 
   Widget get _webView => InAppWebView(
