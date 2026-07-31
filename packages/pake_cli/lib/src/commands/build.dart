@@ -6,12 +6,14 @@ import 'package:pake_config/pake_config.dart';
 import 'package:path/path.dart' as p;
 
 import '../build_pipeline.dart';
+import '../icon_discovery.dart';
 import '../materialize.dart';
 import '../output.dart';
 import '../patch/ios.dart';
 import '../process_runner.dart';
 import '../signing.dart';
 import '../workspace.dart';
+import 'icon.dart' show fetchIconBytes;
 
 class BuildCommand extends Command<int> {
   BuildCommand(
@@ -99,6 +101,25 @@ class BuildCommand extends Command<int> {
       );
     }
 
+    // 图标优先级链：A (--icon 显式指定) → B-E (自动发现)。
+    // --icon 给了就直接用；没给则从网站 HTML / manifest / favicon.ico
+    // 按优先级找，下载到临时文件再交给 materializeConfig。
+    var resolvedConfig = config;
+    if (config.iconPath == null) {
+      final discovered = await discoverIconUrl(config.url);
+      if (discovered != null) {
+        _output.info('Icon: $discovered');
+        try {
+          final bytes = await fetchIconBytes(discovered);
+          final tmp = File(p.join(_workspace.root, '.icon-auto.png'));
+          tmp.writeAsBytesSync(bytes);
+          resolvedConfig = config.copyWith(iconPath: tmp.path);
+        } catch (e) {
+          _output.info('Icon download failed ($e), using default.');
+        }
+      }
+    }
+
     final platforms = args
         .option('platform')!
         .split(',')
@@ -138,7 +159,7 @@ class BuildCommand extends Command<int> {
     final artifacts = await _workspace.withLock(() async {
       syncTemplate(templateDir: templateDir, projectDir: _workspace.projectDir);
       materializeConfig(
-        config: config,
+        config: resolvedConfig,
         workspace: _workspace,
         cwd: Directory.current.path,
         templateDir: templateDir,
