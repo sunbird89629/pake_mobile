@@ -10,6 +10,37 @@ class SigningIdentity {
   final String name;
 }
 
+/// Android release 构建实际会用哪套签名：`'release'` 或 `'debug'`。
+///
+/// 判据必须和 `packages/pake_shell/android/app/build.gradle.kts` 里那份
+/// 逐字一致——同一个文件 `~/.pake/signing.properties`、同一个 `storeFile`
+/// 键、同样把空值当作没配。两边一旦分叉，这里报告的和 gradle 签出来的
+/// 就是两回事，而 APK 的签名指纹要装到手机上才看得见。
+///
+/// 之所以要报告：没配密钥时构建不会失败，只会静默用 debug key 签。debug
+/// 签名的包换台机器（或换一次 CI 运行）构建出来指纹就变了，装不上、也升不了级。
+String androidSigningMode({String? home}) {
+  final file = File(
+    p.join(
+      home ?? Platform.environment['HOME'] ?? '',
+      '.pake',
+      'signing.properties',
+    ),
+  );
+  if (!file.existsSync()) return 'debug';
+
+  for (final line in file.readAsLinesSync()) {
+    final trimmed = line.trimLeft();
+    // java.util.Properties 的注释前缀是 # 和 !。
+    if (trimmed.startsWith('#') || trimmed.startsWith('!')) continue;
+    final eq = trimmed.indexOf('=');
+    if (eq <= 0) continue;
+    if (trimmed.substring(0, eq).trim() != 'storeFile') continue;
+    return trimmed.substring(eq + 1).trim().isEmpty ? 'debug' : 'release';
+  }
+  return 'debug';
+}
+
 final _identityPattern = RegExp(
   r'^\s+\d+\)\s+\S+\s+"(.+)"\s*$',
   multiLine: true,

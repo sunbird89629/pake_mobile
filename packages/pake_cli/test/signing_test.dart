@@ -170,4 +170,48 @@ void main() {
       );
     });
   });
+
+  group('androidSigningMode', () {
+    late Directory home;
+
+    setUp(() => home = Directory.systemTemp.createTempSync('pake-signing'));
+    tearDown(() => home.deleteSync(recursive: true));
+
+    void writeProps(String content) {
+      Directory('${home.path}/.pake').createSync(recursive: true);
+      File('${home.path}/.pake/signing.properties').writeAsStringSync(content);
+    }
+
+    test('reports debug when no signing.properties exists', () {
+      expect(androidSigningMode(home: home.path), 'debug');
+    });
+
+    test('reports release when storeFile is set', () {
+      writeProps('''
+storeFile=/keys/pake-release.jks
+storePassword=secret
+keyAlias=pake
+keyPassword=secret
+''');
+      expect(androidSigningMode(home: home.path), 'release');
+    });
+
+    test('treats a blank storeFile as unconfigured, like gradle does', () {
+      writeProps('storeFile=\nkeyAlias=pake\n');
+      expect(androidSigningMode(home: home.path), 'debug');
+    });
+
+    test('ignores a commented-out storeFile', () {
+      writeProps('# storeFile=/keys/old.jks\nkeyAlias=pake\n');
+      expect(androidSigningMode(home: home.path), 'debug');
+    });
+
+    // 两个键名都是 `storeFile` 的近邻，各挡一类错误实现：
+    // `storeFilePassword` 挡 startsWith/contains，`mystoreFile` 挡
+    // endsWith/contains。少任何一个，对应的错误实现都能蒙混过关。
+    test('does not match keys that merely contain storeFile', () {
+      writeProps('storeFilePassword=secret\nmystoreFile=/keys/old.jks\n');
+      expect(androidSigningMode(home: home.path), 'debug');
+    });
+  });
 }

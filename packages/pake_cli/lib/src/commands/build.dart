@@ -166,6 +166,10 @@ class BuildCommand extends Command<int> {
       'app': config.name,
       'artifacts': archived,
       'archivedInto': _workspace.outDirFor(config.name),
+      // 让「这个包到底是不是正式签名」在结果里直接可读，而不是等装机时
+      // 撞上 INSTALL_FAILED_UPDATE_INCOMPATIBLE 才发现。
+      if (platforms.contains(PakePlatform.android))
+        'androidSigning': androidSigningMode(),
     });
     return 0;
   }

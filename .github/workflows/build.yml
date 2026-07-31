@@ -40,13 +40,54 @@ jobs:
       - name: Install pakem
         run: dart pub global activate --source path packages/pake_cli
 
-      - name: Build
+      # 密钥写到 `~/.pake/signing.properties`——和本地构建同一个约定，
+      # `pake_shell/android/app/build.gradle.kts` 只认这一个位置。
+      #
+      # 不配 secrets 时这步整个跳过，构建照样出包，但会回落到 debug 签名。
+      # 那种包每次运行的签名指纹都不同，装不上也升不了级，所以下面的
+      # Report signing 会把实际签名类型摆到 job summary 上，不让它蒙混过去。
+      #
+      # 条件判断放在 shell 里而不是 `if:`——step 级 `env` 对同一步的 `if:`
+      # 并不可见，写成 `if: env.X != ''` 会恒为真。
+      - name: Set up release signing
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "ANDROID_KEYSTORE_BASE64 not set; falling back to a debug key."
+            exit 0
+          fi
+          mkdir -p "$HOME/.pake"
+          umask 077
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$HOME/.pake/release.p12"
+          cat > "$HOME/.pake/signing.properties" <<EOF
+          storeFile=$HOME/.pake/release.p12
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEYSTORE_PASSWORD
+          EOF
+
+      - name: Build
+        # runner 默认是 `bash -e`，不开 pipefail：不加这句，pakem 失败也会被
+        # tee 的退出码盖住，job 绿着结束而 build.json 里是半截输出。
+        run: |
+          set -o pipefail
           pakem build "${{ inputs.url }}" \
             --name "${{ inputs.name }}" \
             --bundle-id "${{ inputs.bundle_id }}" \
             --platform android \
-            --json
+            --json | tee build.json
+          echo
+
+      - name: Report signing
+        run: |
+          MODE=$(jq -r '.androidSigning // "unknown"' build.json)
+          echo "Android signing: **$MODE**" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$MODE" != release ]; then
+            echo "::warning::APK signed with a throwaway debug key — it cannot be installed over, or upgraded from, any other build. Set the ANDROID_KEYSTORE_* secrets for a distributable APK."
+          fi
 
       # upload-artifact 的 glob 不展开 `~`，会把它当成字面目录名，于是什么
       # 都匹配不到；再加上 `if-no-files-found` 默认只是 warn，job 就绿着结束

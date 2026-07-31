@@ -38,6 +38,40 @@ workspace 是跨 app 复用的单一 Flutter 项目，`~/.pake/workspace/build/`
 
 `1` 配置错误 · `2` 环境缺失 · `3` 构建失败。`--json` 模式下错误同样是 JSON。
 
+## Android 发布签名
+
+不配密钥也能出包，但会用 Flutter 的 debug key 签——**那种 APK 换台机器
+或换一次 CI 运行，签名指纹就变了**，装不到已有安装之上，也无法升级。
+`pakem build` 的结果里 `androidSigning` 字段写明本次到底用了哪种。
+
+配置方式是在 `~/.pake/signing.properties` 放四行（`storeFile` 用绝对路径）：
+
+```properties
+storeFile=/Users/you/.pake/pake-release.p12
+storePassword=…
+keyAlias=pake
+keyPassword=…
+```
+
+没有密钥就先生成一个：
+
+```bash
+keytool -genkeypair -v -keystore ~/.pake/pake-release.p12 -storetype PKCS12 \
+  -keyalg RSA -keysize 2048 -validity 10000 -alias pake \
+  -dname "CN=pake, O=pake_mobile, C=CN"
+chmod 600 ~/.pake/pake-release.p12 ~/.pake/signing.properties
+```
+
+这个文件放在 workspace 之外是必须的：`~/.pake/workspace` 每次构建都会被
+模板覆写，放里面会被冲掉；放仓库里则等于把私钥提交上去。
+
+**keystore 丢了就没法再给同一个 app 发更新**，用户只能卸载重装。备份它。
+
+CI 用同一套约定，密钥来自三个 repo secret：`ANDROID_KEYSTORE_BASE64`
+（`base64 < keystore.p12 | tr -d '\n'`）、`ANDROID_KEYSTORE_PASSWORD`、
+`ANDROID_KEY_ALIAS`。没设这些 secret 时 build workflow 照常出包，但会在
+job summary 里标出 debug 签名并给一条 warning。
+
 ## 开发
 
 ```bash
