@@ -5462,7 +5462,8 @@ void writeAndroidIcons({
       p.join(projectDir, 'android/app/src/main/res', entry.key),
     )..createSync(recursive: true);
 
-    File(p.join(dir.path, 'ic_launcher.png')).writeAsBytesSync(
+    _writeBytesIfChanged(
+      p.join(dir.path, 'ic_launcher.png'),
       img.encodePng(
         img.copyResize(source, width: entry.value, height: entry.value),
       ),
@@ -5477,12 +5478,36 @@ void writeIosIcons({required List<int> pngBytes, required String projectDir}) {
   )..createSync(recursive: true);
 
   for (final entry in iosIconSizes.entries) {
-    File(p.join(dir.path, entry.key)).writeAsBytesSync(
+    _writeBytesIfChanged(
+      p.join(dir.path, entry.key),
       img.encodePng(
         img.copyResize(source, width: entry.value, height: entry.value),
       ),
     );
   }
+}
+
+/// 内容没变就不写。20 个图标每次构建全量重写会 bump mtime，
+/// 让 Gradle / Xcode 的 up-to-date 判定失效——固定 workspace 的意义就没了。
+///
+/// `package:image` 的 PNG 编码器不嵌时间戳、无随机性，是像素数据的纯函数，
+/// 同进程与跨进程重编码均为字节相同，所以按字节比较是可靠的。
+void _writeBytesIfChanged(String path, List<int> bytes) {
+  final file = File(path);
+  if (file.existsSync()) {
+    final existing = file.readAsBytesSync();
+    if (existing.length == bytes.length) {
+      var same = true;
+      for (var i = 0; i < bytes.length; i++) {
+        if (existing[i] != bytes[i]) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return;
+    }
+  }
+  file.writeAsBytesSync(bytes);
 }
 
 class IconCommand extends Command<int> {
