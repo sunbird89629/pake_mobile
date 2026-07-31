@@ -9,12 +9,19 @@ const _permsEnd = '    <!-- pake:permissions:end -->';
 ///
 /// minSdk / targetSdk 保持 flutter 默认——那是 Flutter 工具链的事，
 /// pake 不该越界。
+///
+/// `namespace` 故意不跟着 `bundleId` 改。`namespace` 是编译期包名，
+/// AndroidManifest.xml 里 `android:name=".MainActivity"` 这类相对写法
+/// 就是拿它来解析的；而 `packages/pake_shell` 模板里的 Kotlin 源码
+/// （`android/app/src/main/kotlin/com/example/pake_shell/MainActivity.kt`）
+/// 声明的包名固定是 `com.example.pake_shell`，patch 阶段不会挪动或重写
+/// Kotlin 源码。一旦把 `namespace` 也改成自定义 bundleId，`.MainActivity`
+/// 就会解析成一个不存在的类，安装后启动即
+/// `ClassNotFoundException` 崩溃。`applicationId` 才是运行时进程/包标识，
+/// 这里改它就够了——`namespace` 与 `applicationId` 各自独立本就是 Android
+/// 的标准用法（product flavor 就是这么用的）。
 String patchBuildGradle(String original, PakeConfig config) {
   return original
-      .replaceAll(
-        RegExp(r'namespace\s*=\s*"[^"]*"'),
-        'namespace = "${config.bundleId}"',
-      )
       .replaceAll(
         RegExp(r'applicationId\s*=\s*"[^"]*"'),
         'applicationId = "${config.bundleId}"',

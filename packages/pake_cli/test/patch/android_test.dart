@@ -37,14 +37,18 @@ void main() {
   });
 
   group('patchBuildGradle', () {
-    test('rewrites applicationId, namespace and version', () {
+    test('rewrites applicationId and version, but leaves namespace alone', () {
+      // namespace 是编译期包名，AndroidManifest.xml 里的相对
+      // `.MainActivity` 就是拿它解析的；模板的 Kotlin 源码包名固定是
+      // com.example.pake_shell，改了 namespace 会让 .MainActivity 解析
+      // 到一个不存在的类，装上就崩溃（ClassNotFoundException）。
+      // applicationId 才是运行时包标识，二者独立是 Android 的标准用法。
       final out = patchBuildGradle(_fixture('build.gradle.kts.in'), _config);
 
       expect(out, contains('applicationId = "com.pake.weibo"'));
-      expect(out, contains('namespace = "com.pake.weibo"'));
+      expect(out, contains('namespace = "com.example.pake_shell"'));
       expect(out, contains('versionName = "2.1.0"'));
       expect(out, contains('versionCode = 42'));
-      expect(out, isNot(contains('com.example.pake_shell')));
       expect(out, isNot(contains('flutter.versionCode')));
     });
 
@@ -59,6 +63,74 @@ void main() {
       expect(out, contains('minSdk = flutter.minSdkVersion'));
       expect(out, contains('targetSdk = flutter.targetSdkVersion'));
     });
+
+    test(
+      'the patched namespace still matches the package MainActivity.kt is '
+      'compiled into, so the manifest\'s relative ".MainActivity" resolves',
+      () {
+        // 只对比字符串会撒谎：真正的不变量是「namespace 解出来的类真的
+        // 存在」。这条测试直接读真实模板里的 Kotlin 源码和真实的
+        // build.gradle.kts / AndroidManifest.xml，用一个 bundleId 跟模板
+        // 包名不同的 config 去 patch，然后验证 patch 后的 namespace 仍然
+        // 等于 MainActivity.kt 里声明的包名——这正是当初漏掉、导致真机
+        // ClassNotFoundException 崩溃的那个不变量。就算以后有人把
+        // MainActivity.kt 挪了地方，这条测试读的是源码本身，不会说谎。
+        final shellDir = p.normalize(
+          p.join(_fixturesDir, '..', '..', '..', '..', 'pake_shell'),
+        );
+        final mainActivityKt = File(
+          p.join(
+            shellDir,
+            'android',
+            'app',
+            'src',
+            'main',
+            'kotlin',
+            'com',
+            'example',
+            'pake_shell',
+            'MainActivity.kt',
+          ),
+        ).readAsStringSync();
+        final packageMatch = RegExp(
+          r'^package\s+([\w.]+)',
+          multiLine: true,
+        ).firstMatch(mainActivityKt);
+        expect(
+          packageMatch,
+          isNotNull,
+          reason: 'MainActivity.kt must declare a package',
+        );
+        final compiledPackage = packageMatch!.group(1)!;
+
+        final gradleSrc = File(
+          p.join(shellDir, 'android', 'app', 'build.gradle.kts'),
+        ).readAsStringSync();
+
+        final config = _config.copyWith(bundleId: 'com.example.myapp');
+        expect(
+          config.bundleId,
+          isNot(compiledPackage),
+          reason:
+              'the test is meaningless unless bundleId diverges from '
+              'the template package',
+        );
+
+        final out = patchBuildGradle(gradleSrc, config);
+
+        expect(out, contains('applicationId = "${config.bundleId}"'));
+        expect(
+          out,
+          contains('namespace = "$compiledPackage"'),
+          reason:
+              'AndroidManifest.xml uses the relative ".MainActivity", which '
+              'Android resolves against `namespace` — if namespace stops '
+              'matching the package MainActivity.kt was compiled into, the '
+              'app installs but crashes on launch with '
+              'ClassNotFoundException',
+        );
+      },
+    );
   });
 
   group('patchAndroidManifest', () {
