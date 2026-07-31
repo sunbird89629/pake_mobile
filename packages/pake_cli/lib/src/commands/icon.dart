@@ -80,7 +80,8 @@ void writeAndroidIcons({
       p.join(projectDir, 'android/app/src/main/res', 'mipmap-${entry.key}'),
     )..createSync(recursive: true);
 
-    File(p.join(dir.path, 'ic_launcher.png')).writeAsBytesSync(
+    _writeBytesIfChanged(
+      File(p.join(dir.path, 'ic_launcher.png')),
       img.encodePng(
         img.copyResize(source, width: entry.value, height: entry.value),
       ),
@@ -95,12 +96,34 @@ void writeIosIcons({required List<int> pngBytes, required String projectDir}) {
   )..createSync(recursive: true);
 
   for (final entry in iosIconSizes.entries) {
-    File(p.join(dir.path, entry.key)).writeAsBytesSync(
+    _writeBytesIfChanged(
+      File(p.join(dir.path, entry.key)),
       img.encodePng(
         img.copyResize(source, width: entry.value, height: entry.value),
       ),
     );
   }
+}
+
+/// 只在字节真的变了才写——跟 `materialize.dart` 里字符串版的
+/// `_writeIfChanged` 是同一个道理：图标文件无谓的 mtime 变化会让
+/// Gradle / Xcode 的增量判定失效，固定 workspace 的增量缓存就白搭了。
+/// `package:image` 的 PNG 编码器是像素数据的纯函数，不带时间戳或随机数，
+/// 同一份源图重新编码出的字节可以放心逐字节比较。
+void _writeBytesIfChanged(File file, List<int> bytes) {
+  if (file.existsSync() && _bytesEqual(file.readAsBytesSync(), bytes)) {
+    return;
+  }
+  file.parent.createSync(recursive: true);
+  file.writeAsBytesSync(bytes);
+}
+
+bool _bytesEqual(List<int> a, List<int> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
 
 class IconCommand extends Command<int> {

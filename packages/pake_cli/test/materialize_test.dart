@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:image/image.dart' as img;
 import 'package:pake_cli/src/materialize.dart';
 import 'package:pake_cli/src/output.dart';
 import 'package:pake_cli/src/workspace.dart';
@@ -236,5 +237,48 @@ void main() {
         isFalse,
       );
     });
+
+    test(
+      'does not rewrite icon files when materialized again with the same icon',
+      () {
+        final iconPath = '${tmp.path}/icon.png';
+        File(
+          iconPath,
+        ).writeAsBytesSync(img.encodePng(img.Image(width: 512, height: 512)));
+        final withIcon = config.copyWith(iconPath: iconPath);
+
+        materializeConfig(config: withIcon, workspace: ws, cwd: tmp.path);
+
+        // 内容相等的断言在新旧实现下都会通过——真正证明「没有重写」的
+        // 只能是 mtime 或写入次数，跟 pake.json 的幂等性测试同一个道理。
+        final androidIcon = File(
+          '${ws.projectDir}/android/app/src/main/res/mipmap-mdpi/ic_launcher.png',
+        );
+        final iosIcon = File(
+          '${ws.projectDir}/ios/Runner/Assets.xcassets/AppIcon.appiconset/'
+          'Icon-App-1024x1024@1x.png',
+        );
+        final stamp = DateTime(2000);
+        androidIcon.setLastModifiedSync(stamp);
+        iosIcon.setLastModifiedSync(stamp);
+
+        materializeConfig(config: withIcon, workspace: ws, cwd: tmp.path);
+
+        expect(
+          androidIcon.lastModifiedSync(),
+          stamp,
+          reason:
+              'an unnecessary mtime bump on an unchanged icon invalidates '
+              "Gradle's up-to-date checks",
+        );
+        expect(
+          iosIcon.lastModifiedSync(),
+          stamp,
+          reason:
+              'an unnecessary mtime bump on an unchanged icon invalidates '
+              "Xcode's up-to-date checks",
+        );
+      },
+    );
   });
 }
