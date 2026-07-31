@@ -30,12 +30,17 @@ jobs:
 
       # CI runner 每次是新环境，必然冷构建。缓存能缓解，
       # 但云构建始终慢于本地——这是物理限制，不是设计缺陷。
+      #
+      # `save-always: true` 确保即使后续步骤（Report / Collect）失败，
+      # 1.2GB 的 Gradle 缓存也不会被丢弃——下次运行仍是热构建。
+      # 默认的 `false` 意味着任何一次 job 失败就让缓存报废。
       - uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: gradle-${{ runner.os }}-${{ hashFiles('packages/pake_shell/android/**/*.gradle*') }}
+          save-always: true
 
       # 不走 `dart pub global activate`：它生成的壳脚本会把
       # "Resolving dependencies…" 打到 stdout，混在 `--json` 输出前面，
@@ -48,7 +53,7 @@ jobs:
       # 密钥写到 `~/.pake/signing.properties`——和本地构建同一个约定，
       # `pake_shell/android/app/build.gradle.kts` 只认这一个位置。
       #
-      # 不配 secrets 时这步整个跳过，构建照样出包，但会回落到 debug 签名。
+      # 不配 secrets 时这步什么都不写，构建照样出包，但会回落到 debug 签名。
       # 那种包每次运行的签名指纹都不同，装不上也升不了级，所以下面的
       # Report signing 会把实际签名类型摆到 job summary 上，不让它蒙混过去。
       #
@@ -102,7 +107,7 @@ jobs:
       - name: Collect archived artifacts
         run: |
           mkdir -p artifacts
-          cp -R "$HOME"/.pake/out/*/. artifacts/
+          cp "$HOME"/.pake/out/*/app-*.apk artifacts/
           ls -l artifacts
 
       - uses: actions/upload-artifact@v4
@@ -113,23 +118,47 @@ jobs:
           if-no-files-found: error
 
   smoke:
+    # 不再自己做一次完整 Android 构建——直接验证 android job 的产物。
+    # 之前 smoke 独立跑 `pakem build example.com`，和 android job 各做
+    # 一次冷 Gradle，浪费一倍的 CI 分钟而没有任何额外信号。
+    needs: android
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/download-artifact@v4
         with:
-          distribution: temurin
-          java-version: '17'
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.41.2'
-          cache: true
-      - name: Smoke build
-        working-directory: packages/pake_cli
-        # `--tags smoke` 只是选中被打了 smoke 标签的用例；
-        # `dart_test.yaml` 里的 `skip:` 是无条件的，不会因为
-        # `--tags` 选中了它就不跳过。必须再加 `--run-skipped`
-        # 才会真正执行——这是本任务实测出来的，不是查文档猜的：
-        # 光用 `dart test --tags smoke` 在本地会得到
-        # "All tests skipped."，退出码 0，CI 会静默地什么都没测。
-        run: dart pub get && dart test --tags smoke --run-skipped
+          name: apk
+          path: artifacts/
+
+      - name: Verify APK
+        run: |
+          set -euo pipefail
+          APK=$(ls artifacts/app-arm64-v8a-release.apk 2>/dev/null || true)
+          if [ -z "$APK" ]; then
+            echo "::error::No arm64 APK found in artifact"
+            exit 1
+          fi
+
+          echo "APK: $APK ($(du -h "$APK" | cut -f1))"
+
+          # 直接从 zip 里把 JSON 拽出来——不需要 aapt。
+          CONFIG=$(unzip -p "$APK" assets/flutter_assets/assets/pake.json)
+          echo "pake.json: $CONFIG"
+
+          URL=$(echo "$CONFIG" | jq -r '.url')
+          NAME=$(echo "$CONFIG" | jq -r '.name')
+          BUNDLE=$(echo "$CONFIG" | jq -r '.bundleId')
+
+          if [ "$URL" != "${{ inputs.url }}" ]; then
+            echo "::error::URL mismatch: expected '${{ inputs.url }}', got '$URL'"
+            exit 1
+          fi
+          if [ "$NAME" != "${{ inputs.name }}" ]; then
+            echo "::error::Name mismatch: expected '${{ inputs.name }}', got '$NAME'"
+            exit 1
+          fi
+          if [ "$BUNDLE" != "${{ inputs.bundle_id }}" ]; then
+            echo "::error::Bundle ID mismatch: expected '${{ inputs.bundle_id }}', got '$BUNDLE'"
+            exit 1
+          fi
+
+          echo "All verifications passed."
