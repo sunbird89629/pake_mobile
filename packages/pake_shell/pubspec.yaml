@@ -34,6 +34,7 @@ dependencies:
   flutter_inappwebview: ^6.2.0-beta.3
   get_storage: ^2.1.1
   path_provider: ^2.1.6
+  pin_lock_screen: ^1.0.1
   pake_config:
     path: ../pake_config
   debug_sheet:
