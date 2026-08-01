@@ -59,6 +59,10 @@ class _PinGateState extends State<PinGate> with WidgetsBindingObserver {
     if (!config.appLockEnabled || config.pinCode == null) return;
 
     final pausedAt = _pausedAt;
+    // 时间戳只能用一次：读到就立刻清掉，不然一次没超时的短暂离开会留下
+    // 陈旧时间戳——之后哪怕没有新的 paused，单靠再来一次 resumed（比如
+    // 下拉通知栏又收起）也能凑够时间差，把人错误地锁在外面。
+    _pausedAt = null;
     if (pausedAt == null) return;
 
     // 后台里 Timer 不保证继续跑（进程可能被冻结），只能记时间戳、回来算差。

@@ -134,4 +134,35 @@ void main() {
 
     expect(find.text('the web page'), findsNothing);
   });
+
+  testWidgets(
+    'a second resume with no fresh pause does not lock on a stale timestamp',
+    (tester) async {
+      // 回归用例：_pausedAt 只在 paused 时写、不在 resumed 时清，会让一次
+      // 「没超时」的短暂离开留下一个陈旧时间戳。之后哪怕没有新的 paused，
+      // 单靠再来一次 resumed（比如下拉通知栏又收起）也能凑够时间差，
+      // 把人错误地锁在外面。
+      config
+        ..appLockEnabled = true
+        ..pinCode = 1234;
+      await pump(tester, timeout: const Duration(milliseconds: 100));
+      for (final d in '1234'.split('')) {
+        await tester.tap(find.text(d));
+        await tester.pump();
+      }
+
+      // 短暂离开又回来，没有超时，不该锁。
+      await leaveAndReturn(tester, const Duration(milliseconds: 20));
+      expect(find.text('the web page'), findsOneWidget);
+
+      // 没有新的 paused——直接等过超时时长，再发一次 resumed。
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 150)),
+      );
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+
+      expect(find.text('the web page'), findsOneWidget);
+    },
+  );
 }
