@@ -1,0 +1,137 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:get_storage/get_storage.dart';
+import 'package:pake_config/pake_config.dart';
+import 'package:pake_shell/src/lock/pin_gate.dart';
+import 'package:pake_shell/src/runtime_config.dart';
+
+const _buildTime = PakeConfig(
+  name: 'Weibo',
+  url: 'https://m.weibo.cn',
+  bundleId: 'com.pake.weibo',
+);
+
+void main() {
+  late RuntimeConfig config;
+
+  setUp(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+
+    // get_storage 在真机上靠 path_provider 找文档目录；单元测试没有原生
+    // 插件通道，这里喂一个假实现，指向临时目录。
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          (call) async =>
+              Directory.systemTemp.createTempSync('pake_shell_test').path,
+        );
+
+    await GetStorage.init();
+    await GetStorage().erase();
+    config = RuntimeConfig.fromBuildTime(_buildTime);
+  });
+
+  Future<void> pump(
+    WidgetTester tester, {
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PinGate(
+          config: config,
+          timeout: timeout,
+          child: const Text('the web page'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> leaveAndReturn(WidgetTester tester, Duration away) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    // 必须用 runAsync：testWidgets 默认跑在 FakeAsync 里，`tester.pump(d)`
+    // 只推进假时钟，而 PinGate 算的是 `DateTime.now()` 的真实时间差——
+    // 假时钟推得再多，那个差值也是 0。runAsync 里时间是真的会走的。
+    await tester.runAsync(() => Future<void>.delayed(away));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+  }
+
+  testWidgets('lets the page through when the lock is off', (tester) async {
+    await pump(tester);
+
+    expect(find.text('the web page'), findsOneWidget);
+  });
+
+  testWidgets('locks on a cold start when the lock is on', (tester) async {
+    config
+      ..appLockEnabled = true
+      ..pinCode = 1234;
+
+    await pump(tester);
+
+    expect(find.text('the web page'), findsNothing);
+    expect(find.text('Weibo'), findsOneWidget);
+  });
+
+  testWidgets('lets the page through when no pin was ever set', (tester) async {
+    // 防砖回归：残缺的存储状态（开关开着但没 PIN）不能把人挡在外面。
+    config.appLockEnabled = true;
+
+    await pump(tester);
+
+    expect(find.text('the web page'), findsOneWidget);
+  });
+
+  testWidgets('the correct pin reveals the page', (tester) async {
+    config
+      ..appLockEnabled = true
+      ..pinCode = 1234;
+    await pump(tester);
+
+    for (final d in '1234'.split('')) {
+      await tester.tap(find.text(d));
+      await tester.pump();
+    }
+    await tester.pump();
+
+    expect(find.text('the web page'), findsOneWidget);
+  });
+
+  testWidgets('a short trip to the background does not lock', (tester) async {
+    config
+      ..appLockEnabled = true
+      ..pinCode = 1234;
+    await pump(tester, timeout: const Duration(milliseconds: 200));
+    for (final d in '1234'.split('')) {
+      await tester.tap(find.text(d));
+      await tester.pump();
+    }
+
+    await leaveAndReturn(tester, const Duration(milliseconds: 20));
+
+    expect(find.text('the web page'), findsOneWidget);
+  });
+
+  testWidgets('staying away past the timeout locks again', (tester) async {
+    config
+      ..appLockEnabled = true
+      ..pinCode = 1234;
+    await pump(tester, timeout: const Duration(milliseconds: 100));
+    for (final d in '1234'.split('')) {
+      await tester.tap(find.text(d));
+      await tester.pump();
+    }
+
+    await leaveAndReturn(tester, const Duration(milliseconds: 150));
+
+    expect(find.text('the web page'), findsNothing);
+  });
+}
