@@ -99,9 +99,11 @@ void main() {
     testWidgets('every script starts enabled', (tester) async {
       await pump(tester);
 
-      final switches = tester.widgetList<SwitchListTile>(
-        find.byType(SwitchListTile),
-      );
+      // 按 key 过滤到脚本开关——设置页还有别的开关（比如 App lock），
+      // 那些默认值跟脚本无关，混进来断言会跟着无关改动一起漂。
+      final switches = tester
+          .widgetList<SwitchListTile>(find.byType(SwitchListTile))
+          .where((s) => s.key.toString().contains('script:'));
       expect(switches.every((s) => s.value), isTrue);
     });
 
@@ -170,6 +172,93 @@ void main() {
       await pump(tester);
 
       expect(find.textContaining('https://m.weibo.cn'), findsWidgets);
+    });
+  });
+
+  group('app lock', () {
+    testWidgets('is off and offers no pin entry until turned on', (
+      tester,
+    ) async {
+      await pump(tester);
+
+      final sw = tester.widget<SwitchListTile>(
+        find.byKey(const ValueKey('appLock')),
+      );
+      expect(sw.value, isFalse);
+      expect(find.byKey(const ValueKey('changePin')), findsNothing);
+    });
+
+    testWidgets('turning it on asks for a pin and persists both', (
+      tester,
+    ) async {
+      await pump(tester);
+
+      await tester.tap(find.byKey(const ValueKey('appLock')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('newPin')), '1234');
+      await tester.enterText(find.byKey(const ValueKey('confirmPin')), '1234');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(config.appLockEnabled, isTrue);
+      expect(config.pinCode, 1234);
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('changePin')),
+        200,
+      );
+      expect(find.byKey(const ValueKey('changePin')), findsOneWidget);
+    });
+
+    testWidgets('cancelling the pin dialog leaves the lock off', (
+      tester,
+    ) async {
+      await pump(tester);
+
+      await tester.tap(find.byKey(const ValueKey('appLock')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(config.appLockEnabled, isFalse);
+      expect(config.pinCode, isNull);
+      final sw = tester.widget<SwitchListTile>(
+        find.byKey(const ValueKey('appLock')),
+      );
+      expect(sw.value, isFalse, reason: '开关必须弹回去');
+    });
+
+    testWidgets('turning it off clears the pin', (tester) async {
+      config
+        ..appLockEnabled = true
+        ..pinCode = 1234;
+      await pump(tester);
+
+      await tester.tap(find.byKey(const ValueKey('appLock')));
+      await tester.pumpAndSettle();
+
+      expect(config.appLockEnabled, isFalse);
+      expect(config.pinCode, isNull);
+    });
+
+    testWidgets('changing the pin keeps the lock on', (tester) async {
+      config
+        ..appLockEnabled = true
+        ..pinCode = 1234;
+      await pump(tester);
+
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('changePin')),
+        200,
+      );
+      await tester.tap(find.byKey(const ValueKey('changePin')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('newPin')), '5678');
+      await tester.enterText(find.byKey(const ValueKey('confirmPin')), '5678');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(config.appLockEnabled, isTrue);
+      expect(config.pinCode, 5678);
     });
   });
 }

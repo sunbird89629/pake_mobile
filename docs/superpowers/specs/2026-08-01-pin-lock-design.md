@@ -59,15 +59,27 @@ DateTime? _pausedAt;
 void didChangeAppLifecycleState(AppLifecycleState state) {
   if (state == AppLifecycleState.paused) {
     _pausedAt = DateTime.now();
-  } else if (state == AppLifecycleState.resumed) {
-    if (!config.appLockEnabled || config.pinCode == null) return;
-    final away = DateTime.now().difference(_pausedAt ?? DateTime.now());
-    if (away >= timeout) setState(() => _locked = true);
+    return;
+  }
+  if (state != AppLifecycleState.resumed) return;
+
+  // 时间戳只能用一次，且必须在配置检查之前消费掉。
+  final pausedAt = _pausedAt;
+  _pausedAt = null;
+  if (pausedAt == null) return;
+
+  if (!config.appLockEnabled || config.pinCode == null) return;
+  if (DateTime.now().difference(pausedAt) >= timeout) {
+    setState(() => _locked = true);
   }
 }
 ```
 
-`timeout` 是构造参数，默认 30 秒，标 `@visibleForTesting`——测试里传 100ms 就能测超时，不必注入伪时钟。
+`timeout` 是构造参数，默认 30 秒——测试里传 100ms 就能测超时，不必注入伪时钟。
+
+**时间戳只能消费一次，且要在配置检查之前清掉。** 这一条是实现期评审揪出来的，两轮才修干净，值得写进设计：`paused` 分支是**无条件**记时间戳的，它不看配置。所以清空动作只要排在 `appLockEnabled` / `pinCode` 守卫之后，就会漏掉一整类路径——锁关着的时候切后台再回来，时间戳留在原地；之后哪怕全程在前台把锁打开，下一次 `resumed`（下拉一次通知栏收起就够）也会拿这个陈旧时间戳去算差，把人锁在外面，而他根本没离开过。
+
+反过来说这也解释了为什么不能光看「按 `paused` 不按 `inactive`」就以为安全：下拉通知栏确实**启动**不了计时，但它能**完成**一个早就该作废的计时。
 
 **用 `paused` 不用 `inactive`。** `inactive` 在下拉通知栏、来电横幅、iOS 应用切换器出现时就触发，用它等于划一下通知栏就开始计时。
 
@@ -79,7 +91,15 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
 
 **`pinCode == null` 无条件放行。** 防御性的：一个残缺的存储状态不该能把 app 变砖。
 
-## 配置层
+### 挂载：builder 还是包 home
+
+`PinGate` 挂在 `MaterialApp.builder` 上（Navigator 之上），而不是包住 `home`。设置页是 `push` 出来的路由——包 `home` 的话，人在设置页里切后台再回来，锁屏会被已 push 的设置页**盖住**，等于没锁。`builder` 位于 Navigator 之上，遮罩因此能覆盖一切路由，包括最关键的「在设置页里切后台超时，回来看见的是锁屏而非还没退出就暴露的设置页」——那条是整个挂载点选择的唯一经验证据，十条手工验证里最重的一条。
+
+### 覆盖，不是替换
+
+`build` 必须返回 `Stack`（child 始终在里面，锁屏叠在上面），而不是 `return LockScreen` 换掉 child。child 是整棵 `MaterialApp` Navigator 子树——换掉它就等于卸载路由栈、销毁 WebView、再重建。widget test 层面完全抓不住这个：所有测试只断言「锁屏显示了 / 页面显示了」，从未问过「页面还是不是原来那个实例」。是真机验证发现的——滚动到排行榜再锁，解锁后回到页面顶部，路由栈也丢了。
+
+用 `Offstage(offstage: showLock, child:)` 而非裸 `Stack`：child 留在树上所以 State 不重建（`initState` 只跑一次），但 `Offstage` 让它既不绘制也不接收点击——到这一步，即便是 Android hybrid composition 下原生 WebView 可能渲染在 Flutter 层之上的担心也不再成立：Flutter 层已经把整个子树从绘制和命中测试里移除了。真机验证确认：滚动位置像素级保留，锁屏画面无内容透出，底层链接不受点击穿透。
 
 `RuntimeKeys` 沿用 `pake.` 前缀：
 

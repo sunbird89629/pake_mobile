@@ -146,4 +146,39 @@ void main() {
 
     expect(GetStorage().read('some-debug-sheet-history-key'), ['typed-value']);
   });
+
+  test('the app lock is off until it is turned on', () {
+    final c = RuntimeConfig.fromBuildTime(_buildTime);
+
+    expect(c.appLockEnabled, isFalse);
+    expect(c.pinCode, isNull);
+  });
+
+  test('the pin and the switch persist across instances', () {
+    RuntimeConfig.fromBuildTime(_buildTime)
+      ..appLockEnabled = true
+      ..pinCode = 1234;
+
+    final c = RuntimeConfig.fromBuildTime(_buildTime);
+
+    expect(c.appLockEnabled, isTrue);
+    expect(c.pinCode, 1234);
+  });
+
+  test('a corrupt pin reads as unset instead of locking the user out', () {
+    GetStorage().write(RuntimeKeys.pinCode, 'not-a-number');
+
+    expect(RuntimeConfig.fromBuildTime(_buildTime).pinCode, isNull);
+  });
+
+  test('reset clears the app lock', () {
+    final c = RuntimeConfig.fromBuildTime(_buildTime)
+      ..appLockEnabled = true
+      ..pinCode = 1234;
+
+    c.reset();
+
+    expect(c.appLockEnabled, isFalse);
+    expect(c.pinCode, isNull);
+  });
 }

@@ -39,6 +39,23 @@ class RuntimeConfig {
   set captureNetwork(bool value) =>
       _box.write(RuntimeKeys.captureNetwork, value);
 
+  /// 默认关。这是个网页壳，多数站点不需要锁——默认开会让所有现有用户
+  /// 莫名其妙被挡在外面。
+  bool get appLockEnabled => _readBool(RuntimeKeys.appLockEnabled) ?? false;
+  set appLockEnabled(bool value) =>
+      _box.write(RuntimeKeys.appLockEnabled, value);
+
+  /// `null` = 没设过。读到非 int（人手改过、旧版本遗留）同样当没设——
+  /// 一个残缺的存储状态不该把人锁在 app 外面。
+  int? get pinCode {
+    final value = _box.read<Object?>(RuntimeKeys.pinCode);
+    return value is int ? value : null;
+  }
+
+  set pinCode(int? value) => value == null
+      ? _box.remove(RuntimeKeys.pinCode)
+      : _box.write(RuntimeKeys.pinCode, value);
+
   /// 默认全开——构建时特意打包进来的脚本，默认不生效才是意外。
   ///
   /// 集合里放的是 **id**（`scriptIdFor`），不是 `pake.json` 里的原始路径：
@@ -67,6 +84,8 @@ class RuntimeConfig {
       RuntimeKeys.logLevel,
       RuntimeKeys.fullscreen,
       RuntimeKeys.captureNetwork,
+      RuntimeKeys.appLockEnabled,
+      RuntimeKeys.pinCode,
     ]) {
       _box.remove(key);
     }
