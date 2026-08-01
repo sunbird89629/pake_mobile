@@ -91,7 +91,15 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
 
 **`pinCode == null` 无条件放行。** 防御性的：一个残缺的存储状态不该能把 app 变砖。
 
-## 配置层
+### 挂载：builder 还是包 home
+
+`PinGate` 挂在 `MaterialApp.builder` 上（Navigator 之上），而不是包住 `home`。设置页是 `push` 出来的路由——包 `home` 的话，人在设置页里切后台再回来，锁屏会被已 push 的设置页**盖住**，等于没锁。`builder` 位于 Navigator 之上，遮罩因此能覆盖一切路由，包括最关键的「在设置页里切后台超时，回来看见的是锁屏而非还没退出就暴露的设置页」——那条是整个挂载点选择的唯一经验证据，十条手工验证里最重的一条。
+
+### 覆盖，不是替换
+
+`build` 必须返回 `Stack`（child 始终在里面，锁屏叠在上面），而不是 `return LockScreen` 换掉 child。child 是整棵 `MaterialApp` Navigator 子树——换掉它就等于卸载路由栈、销毁 WebView、再重建。widget test 层面完全抓不住这个：所有测试只断言「锁屏显示了 / 页面显示了」，从未问过「页面还是不是原来那个实例」。是真机验证发现的——滚动到排行榜再锁，解锁后回到页面顶部，路由栈也丢了。
+
+用 `Offstage(offstage: showLock, child:)` 而非裸 `Stack`：child 留在树上所以 State 不重建（`initState` 只跑一次），但 `Offstage` 让它既不绘制也不接收点击——到这一步，即便是 Android hybrid composition 下原生 WebView 可能渲染在 Flutter 层之上的担心也不再成立：Flutter 层已经把整个子树从绘制和命中测试里移除了。真机验证确认：滚动位置像素级保留，锁屏画面无内容透出，底层链接不受点击穿透。
 
 `RuntimeKeys` 沿用 `pake.` 前缀：
 
