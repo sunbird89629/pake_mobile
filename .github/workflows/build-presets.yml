@@ -87,7 +87,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: android
+    needs: [matrix, android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -105,14 +105,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="presets-$(date +%Y%m%d-%H%M%S)"
-          PREFIXED=""
+          NOTES="Apps built from \`presets/\` on $(date -u +%Y-%m-%d)."
           for f in all-artifacts/*.apk; do
             cp "$f" .
-            PREFIXED="$PREFIXED- $(basename "$f")\n"
+            NOTES="$NOTES\n- $(basename "$f")"
           done
           gh release create "$TAG" \
             *.apk \
             --title "Presets Build — ${{ needs.matrix.outputs.names }}" \
-            --notes "Apps built from \`presets/\` on $(date -u +%Y-%m-%d).
-
-          $(printf '%b' "$PREFIXED")"
+            --notes "$(printf '%b' "$NOTES")"
