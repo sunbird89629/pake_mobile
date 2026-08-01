@@ -59,15 +59,27 @@ DateTime? _pausedAt;
 void didChangeAppLifecycleState(AppLifecycleState state) {
   if (state == AppLifecycleState.paused) {
     _pausedAt = DateTime.now();
-  } else if (state == AppLifecycleState.resumed) {
-    if (!config.appLockEnabled || config.pinCode == null) return;
-    final away = DateTime.now().difference(_pausedAt ?? DateTime.now());
-    if (away >= timeout) setState(() => _locked = true);
+    return;
+  }
+  if (state != AppLifecycleState.resumed) return;
+
+  // 时间戳只能用一次，且必须在配置检查之前消费掉。
+  final pausedAt = _pausedAt;
+  _pausedAt = null;
+  if (pausedAt == null) return;
+
+  if (!config.appLockEnabled || config.pinCode == null) return;
+  if (DateTime.now().difference(pausedAt) >= timeout) {
+    setState(() => _locked = true);
   }
 }
 ```
 
-`timeout` 是构造参数，默认 30 秒，标 `@visibleForTesting`——测试里传 100ms 就能测超时，不必注入伪时钟。
+`timeout` 是构造参数，默认 30 秒——测试里传 100ms 就能测超时，不必注入伪时钟。
+
+**时间戳只能消费一次，且要在配置检查之前清掉。** 这一条是实现期评审揪出来的，两轮才修干净，值得写进设计：`paused` 分支是**无条件**记时间戳的，它不看配置。所以清空动作只要排在 `appLockEnabled` / `pinCode` 守卫之后，就会漏掉一整类路径——锁关着的时候切后台再回来，时间戳留在原地；之后哪怕全程在前台把锁打开，下一次 `resumed`（下拉一次通知栏收起就够）也会拿这个陈旧时间戳去算差，把人锁在外面，而他根本没离开过。
+
+反过来说这也解释了为什么不能光看「按 `paused` 不按 `inactive`」就以为安全：下拉通知栏确实**启动**不了计时，但它能**完成**一个早就该作废的计时。
 
 **用 `paused` 不用 `inactive`。** `inactive` 在下拉通知栏、来电横幅、iOS 应用切换器出现时就触发，用它等于划一下通知栏就开始计时。
 
