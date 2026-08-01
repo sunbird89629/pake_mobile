@@ -44,7 +44,8 @@ class LockScreen extends StatelessWidget {
                     gapBtwDotsAndNumPad: 40,
                     buttonSize: const Size(72, 72),
                     buttonBorderRadius: 36,
-                    buttonBackgroundColor: theme.colorScheme.surfaceContainerHighest,
+                    buttonBackgroundColor:
+                        theme.colorScheme.surfaceContainerHighest,
                     buttonForegroundColor: theme.colorScheme.onSurface,
                     deleteWidget: const Icon(Icons.backspace_outlined),
                   ),
