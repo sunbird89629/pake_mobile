@@ -3,6 +3,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'debug_drawer.dart';
 import 'escape_hatch.dart';
+import 'lock/pin_gate.dart';
 import 'runtime_config.dart';
 import 'webview_page.dart';
 
@@ -48,6 +49,10 @@ class _PakeAppState extends State<PakeApp> {
       navigatorKey: _navigatorKey,
       title: widget.config.buildTime.name,
       debugShowCheckedModeBanner: false,
+      // 挂 builder 而不是包 home：设置页是 push 出来的路由，包 home 的话
+      // 人在设置页里切后台再回来，锁屏会被设置页盖住，等于没锁。
+      builder: (context, child) =>
+          PinGate(config: widget.config, child: child!),
       home: Stack(
         children: [
           WebViewPage(
