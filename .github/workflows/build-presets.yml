@@ -1,0 +1,116 @@
+name: build-presets
+
+on:
+  workflow_dispatch:
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      presets: ${{ steps.read.outputs.presets }}
+      names: ${{ steps.read.outputs.names }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          PRESETS=$(jq -c -n '[inputs | {name, url, bundleId}]' presets/*.json)
+          NAMES=$(jq -r '.[].name' <<< "$PRESETS" | paste -sd, -)
+          echo "presets=$PRESETS" >> "$GITHUB_OUTPUT"
+          echo "names=$NAMES" >> "$GITHUB_OUTPUT"
+
+  android:
+    needs: matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: ${{ fromJson(needs.matrix.outputs.presets) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.2'
+          cache: true
+
+      - name: Install CLI dependencies
+        working-directory: packages/pake_cli
+        run: dart pub get
+
+      - name: Set up release signing
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "ANDROID_KEYSTORE_BASE64 not set; falling back to a debug key."
+            exit 0
+          fi
+          mkdir -p "$HOME/.pake"
+          umask 077
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$HOME/.pake/release.p12"
+          cat > "$HOME/.pake/signing.properties" <<EOF
+          storeFile=$HOME/.pake/release.p12
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEYSTORE_PASSWORD
+          EOF
+
+      - name: Build
+        working-directory: packages/pake_cli
+        run: |
+          set -o pipefail
+          dart run bin/pakem.dart build "${{ matrix.preset.url }}" \
+            --name "${{ matrix.preset.name }}" \
+            --bundle-id "${{ matrix.preset.bundleId }}" \
+            --platform android \
+            --json | tee "$GITHUB_WORKSPACE/build.json"
+          echo
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts
+          for f in "$HOME"/.pake/out/*/app-*.apk; do
+            base=$(basename "$f")
+            cp "$f" "artifacts/${{ matrix.preset.name }}-$base"
+          done
+          ls -l artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ matrix.preset.name }}
+          path: artifacts/
+          if-no-files-found: error
+
+  release:
+    needs: android
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: apk-*
+          path: all-artifacts/
+          merge-multiple: true
+
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="presets-$(date +%Y%m%d-%H%M%S)"
+          PREFIXED=""
+          for f in all-artifacts/*.apk; do
+            cp "$f" .
+            PREFIXED="$PREFIXED- $(basename "$f")\n"
+          done
+          gh release create "$TAG" \
+            *.apk \
+            --title "Presets Build — ${{ needs.matrix.outputs.names }}" \
+            --notes "Apps built from \`presets/\` on $(date -u +%Y-%m-%d).
+
+          $(printf '%b' "$PREFIXED")"
