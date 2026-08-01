@@ -165,4 +165,33 @@ void main() {
       expect(find.text('the web page'), findsOneWidget);
     },
   );
+
+  testWidgets('enabling the lock after an old pause does not lock on the stale '
+      'timestamp', (tester) async {
+    // 第二类回归：round 1 把清空 _pausedAt 的代码放在了配置检查之后。
+    // 锁关着的时候第一次 resumed 会被前面的 guard 挡住，清空代码根本
+    // 没机会跑，陈旧时间戳照样留着。之后哪怕全程在前台把锁打开（没有
+    // 任何新的 paused），下一次 resumed 也会拿这个陈旧时间戳去算差，
+    // 把人错误地锁在外面。
+    await pump(tester, timeout: const Duration(milliseconds: 100));
+
+    // 锁关着的时候进出一次后台——guard 挡住了清空，陈旧时间戳留下。
+    await leaveAndReturn(tester, const Duration(milliseconds: 10));
+    expect(find.text('the web page'), findsOneWidget);
+
+    // 全程前台：直接在 config 上开锁、设 PIN，没有任何生命周期事件。
+    config
+      ..appLockEnabled = true
+      ..pinCode = 1234;
+    await tester.pump();
+
+    // 没有新的 paused——直接等过超时时长，再发一次 resumed。
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 150)),
+    );
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    expect(find.text('the web page'), findsOneWidget);
+  });
 }

@@ -54,16 +54,17 @@ class _PinGateState extends State<PinGate> with WidgetsBindingObserver {
     }
     if (state != AppLifecycleState.resumed) return;
 
+    // 时间戳只能用一次：不管后面配置检查过不过，先读出来清掉。放在配置
+    // 检查之后会漏——锁关着的时候一次 resumed 被配置检查挡住返回，时间戳
+    // 留在原地；之后哪怕全程在前台把锁打开，下一次 resumed 也会拿这个陈旧
+    // 时间戳去算差，把人错误地锁在外面。
+    final pausedAt = _pausedAt;
+    _pausedAt = null;
+    if (pausedAt == null) return;
+
     // 每次都读实时值：设置页刚关掉锁，这里立刻就能看到，不需要通知机制。
     final config = widget.config;
     if (!config.appLockEnabled || config.pinCode == null) return;
-
-    final pausedAt = _pausedAt;
-    // 时间戳只能用一次：读到就立刻清掉，不然一次没超时的短暂离开会留下
-    // 陈旧时间戳——之后哪怕没有新的 paused，单靠再来一次 resumed（比如
-    // 下拉通知栏又收起）也能凑够时间差，把人错误地锁在外面。
-    _pausedAt = null;
-    if (pausedAt == null) return;
 
     // 后台里 Timer 不保证继续跑（进程可能被冻结），只能记时间戳、回来算差。
     if (DateTime.now().difference(pausedAt) >= widget.timeout) {
