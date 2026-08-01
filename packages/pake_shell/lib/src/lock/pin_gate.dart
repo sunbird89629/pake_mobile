@@ -88,7 +88,7 @@ class _PinGateState extends State<PinGate> with WidgetsBindingObserver {
         if (showLock)
           Positioned.fill(
             child: LockScreen(
-              pinCode: pin!,
+              pinCode: pin,
               appName: widget.config.buildTime.name,
               onUnlocked: () => setState(() {
                 _locked = false;
