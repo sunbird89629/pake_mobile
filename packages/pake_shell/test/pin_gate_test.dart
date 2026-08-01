@@ -14,6 +14,28 @@ const _buildTime = PakeConfig(
   bundleId: 'com.pake.weibo',
 );
 
+// 用来证明 child 全程只挂载过一次：initState 每跑一次就自增，锁屏挡着的
+// 时候如果 child 被换掉重建，这个计数会变成 2。
+int _childInitCount = 0;
+
+class _CountingChild extends StatefulWidget {
+  const _CountingChild();
+
+  @override
+  State<_CountingChild> createState() => _CountingChildState();
+}
+
+class _CountingChildState extends State<_CountingChild> {
+  @override
+  void initState() {
+    super.initState();
+    _childInitCount++;
+  }
+
+  @override
+  Widget build(BuildContext context) => const Text('the web page');
+}
+
 void main() {
   late RuntimeConfig config;
 
@@ -32,6 +54,7 @@ void main() {
     await GetStorage.init();
     await GetStorage().erase();
     config = RuntimeConfig.fromBuildTime(_buildTime);
+    _childInitCount = 0;
   });
 
   Future<void> pump(
@@ -194,4 +217,45 @@ void main() {
 
     expect(find.text('the web page'), findsOneWidget);
   });
+
+  testWidgets(
+    'the child stays mounted behind the lock screen, never replaced',
+    (tester) async {
+      // 回归用例：build() 如果直接 `return LockScreen(...)`，等于把 child
+      // 整棵子树换掉——真实场景里 child 是整个 Navigator（WebView 挂在
+      // 里面），锁一次就等于卸载重建一次，路由栈、滚动位置、登录态全部
+      // 丢。这里用一个自己数 initState 次数的 child 来证明它从头到尾只
+      // 挂载过一次：锁屏只能是盖在上面，不能是换掉它。
+      config
+        ..appLockEnabled = true
+        ..pinCode = 1234;
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PinGate(config: config, child: const _CountingChild()),
+        ),
+      );
+
+      // 冷启动就是锁着的：child 应该已经挂载过一次（只是被锁屏挡住，
+      // 看不见也点不到），而不是压根没建过。
+      expect(_childInitCount, 1);
+      expect(find.text('the web page'), findsNothing);
+      expect(find.text('Weibo'), findsOneWidget);
+
+      for (final d in '1234'.split('')) {
+        await tester.tap(find.text(d));
+        await tester.pump();
+      }
+      await tester.pump();
+
+      // 解锁后锁屏消失、child 露出来——但不是重新挂载的那一个。
+      expect(find.text('the web page'), findsOneWidget);
+      expect(find.text('Weibo'), findsNothing);
+      expect(_childInitCount, 1);
+    },
+  );
 }

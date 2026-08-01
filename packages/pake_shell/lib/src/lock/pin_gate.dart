@@ -75,15 +75,28 @@ class _PinGateState extends State<PinGate> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final pin = widget.config.pinCode;
-    if (!_locked || pin == null) return widget.child;
+    final showLock = _locked && pin != null;
 
-    return LockScreen(
-      pinCode: pin,
-      appName: widget.config.buildTime.name,
-      onUnlocked: () => setState(() {
-        _locked = false;
-        _pausedAt = null;
-      }),
+    // 用 Stack 盖住而不是直接 return LockScreen 换掉：child 是整棵
+    // Navigator 子树（WebView、路由栈都挂在里面），换掉就等于卸载重建，
+    // 路由栈、滚动位置、登录态全部丢——锁屏只能是盖在上面。被锁的时候用
+    // Offstage 让 child 既不绘制也不响应点击（find.text 等默认查找也会
+    // 跳过 offstage 节点，不影响断言）；child 本身永远留在树里不被换掉。
+    return Stack(
+      children: [
+        Offstage(offstage: showLock, child: widget.child),
+        if (showLock)
+          Positioned.fill(
+            child: LockScreen(
+              pinCode: pin!,
+              appName: widget.config.buildTime.name,
+              onUnlocked: () => setState(() {
+                _locked = false;
+                _pausedAt = null;
+              }),
+            ),
+          ),
+      ],
     );
   }
 }
