@@ -36,6 +36,14 @@ jobs:
           flutter-version: '3.41.2'
           cache: true
 
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('packages/pake_shell/android/**/*.gradle*') }}-${{ matrix.preset.name }}
+          restore-keys: gradle-${{ runner.os }}-${{ hashFiles('packages/pake_shell/android/**/*.gradle*') }}-
+
       - name: Install CLI dependencies
         working-directory: packages/pake_cli
         run: dart pub get
@@ -85,6 +93,14 @@ jobs:
           name: apk-${{ matrix.preset.name }}
           path: artifacts/
           if-no-files-found: error
+
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('packages/pake_shell/android/**/*.gradle*') }}-${{ matrix.preset.name }}
 
   release:
     needs: [matrix, android]
