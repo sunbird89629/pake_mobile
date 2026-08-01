@@ -41,7 +41,7 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('packages/pake_shell/android/**/*.gradle*') }}-${{ matrix.preset.name }}
+          key: gradle-${{ runner.os }}-${{ hashFiles('packages/pake_shell/android/**/*.gradle*') }}-${{ matrix.preset.name }}-${{ github.run_id }}
           restore-keys: gradle-${{ runner.os }}-${{ hashFiles('packages/pake_shell/android/**/*.gradle*') }}-
 
       - name: Install CLI dependencies
@@ -100,7 +100,7 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('packages/pake_shell/android/**/*.gradle*') }}-${{ matrix.preset.name }}
+          key: gradle-${{ runner.os }}-${{ hashFiles('packages/pake_shell/android/**/*.gradle*') }}-${{ matrix.preset.name }}-${{ github.run_id }}
 
   release:
     needs: [matrix, android]
