@@ -43,3 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# 开发期注入脚本——见 tool/dev_scripts.dart。
+# 源是各人本机的调试内容；assets/scripts/ 下的产物在真实构建里由
+# materializeConfig 重写，签进仓库只会污染 git status。
+/dev_scripts/
+/assets/scripts/*
+!/assets/scripts/.gitkeep

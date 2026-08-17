@@ -160,7 +160,11 @@ void materializeConfig({
     const JsonEncoder.withIndent('  ').convert(config.toJson()),
   );
 
-  _materializeScripts(config: config, root: root, cwd: cwd);
+  materializeScriptsInto(
+    config: config,
+    outDir: Directory(p.join(root, 'assets/scripts')),
+    cwd: cwd,
+  );
 
   // 同步函数只支持本地路径——远程 URL 抓取是异步的，走 `pakem icon` 单独命令。
   final icon = config.iconPath;
@@ -176,18 +180,27 @@ void materializeConfig({
   }
 }
 
-void _materializeScripts({
+/// 把 [config] 的 `injectScripts` 物化进 [outDir]。
+///
+/// 构建期与开发期共用**同一个函数**：前者由 [materializeConfig] 写进
+/// workspace，后者由 `pake_shell/tool/dev_scripts.dart` 直接写进模板仓库的
+/// `assets/scripts/`。id 规则一旦各写一份，壳算出的启用集合就会跟物化产物
+/// 对不上，而且两边的测试都能是绿的——见 `pake_config` 的 `script_id.dart`。
+///
+/// [preserve] 里的文件名不参与「删除上一次构建的残留」。开发期要靠它保住
+/// `.gitkeep`：那是签入仓库的文件，被当成残留删掉就等于改动了工作区。
+void materializeScriptsInto({
   required PakeConfig config,
-  required String root,
+  required Directory outDir,
   required String cwd,
+  Set<String> preserve = const {},
 }) {
-  final dir = Directory(p.join(root, 'assets/scripts'))
-    ..createSync(recursive: true);
+  final dir = outDir..createSync(recursive: true);
 
   final manifest = <Map<String, Object?>>[];
   // 这一轮该留在目录里的文件。其余的都是上一次构建的残留——留着会被
   // UserScript 一并注入。
-  final wanted = <String>{'index.json'};
+  final wanted = <String>{'index.json', ...preserve};
 
   for (final rawPath in config.injectScripts) {
     final source = File(p.isAbsolute(rawPath) ? rawPath : p.join(cwd, rawPath));

@@ -48,6 +48,12 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
+  # 只给 tool/dev_scripts.dart 用：开发期把注入脚本物化进 assets/scripts/，
+  # 走的是构建期同一个 materializeScriptsInto。dev 依赖不进 app bundle。
+  path: ^1.9.0
+  pake_cli:
+    path: ../pake_cli
+
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your

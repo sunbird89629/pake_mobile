@@ -40,7 +40,25 @@ class WebViewPageState extends State<WebViewPage> {
   InAppWebViewController? _controller;
   LoadFailureKind? _failure;
   List<UserScript> _scripts = const [];
-  List<String> _scriptIds = const [];
+
+  /// 页面进了视频全屏（`WebChromeClient.onShowCustomView`）。此时不能再给
+  /// 顶部留状态栏的位置，否则播放器上方挂一道黑边。
+  bool _videoFullscreen = false;
+
+  /// 状态栏那条留白的底色。
+  ///
+  /// 必须显式给：`PakeApp` 的 `home` 是裸 `Stack`，不填色就会露出
+  /// `MaterialApp` 的浅色默认背景——深色站点顶上顶一条白杠。
+  /// 目标站点多是深色，先钉死黑色；将来要跟随站点，读网页的
+  /// `<meta name="theme-color">` 再换掉这一个常量即可。
+  static const _statusBarBackdrop = Colors.black;
+
+  /// WebView 的 key，直接从 `_scripts` 算——**不要**另存一份 id 列表。
+  ///
+  /// 曾经存过：抓包 hook 只进 `_scripts` 没进那份列表，于是拨 captureNetwork
+  /// 开关时 key 纹丝不动，Element 复用，`initialUserScripts` 不重读，hook
+  /// 关不掉也开不起来。少一个需要手动同步的副本，就少一种漏项的方式。
+  String get _scriptsKey => scriptsKey(_scripts.map((s) => s.groupName ?? ''));
 
   /// 两个互补的抓包来源汇合到这——JS hook（有 body）与 onLoadResource
   /// （只有 URL/时序）都往这里 add。`DebugDrawer` 的「View requests」经
@@ -63,7 +81,6 @@ class WebViewPageState extends State<WebViewPage> {
   Future<void> _loadScripts() async {
     final enabled = widget.config.enabledScripts;
     final scripts = <UserScript>[];
-    final ids = <String>[];
 
     try {
       final manifest =
@@ -74,7 +91,6 @@ class WebViewPageState extends State<WebViewPage> {
         final id = entry['id']! as String;
         if (!enabled.contains(id)) continue;
 
-        ids.add(id);
         scripts.add(
           UserScript(
             groupName: id,
@@ -104,23 +120,34 @@ class WebViewPageState extends State<WebViewPage> {
       );
     }
 
-    if (mounted) {
-      setState(() {
-        _scripts = scripts;
-        _scriptIds = ids;
-      });
-    }
+    if (mounted) setState(() => _scripts = scripts);
   }
 
   /// 开关只在下一次页面加载生效（`WKUserContentController` 的语义），
   /// 所以设置页拨完开关必须调这个。
   Future<void> reloadWithCurrentSettings() async {
+    final keyBefore = _scriptsKey;
+    final wasShowingError = _failure != null;
+
     await _loadScripts();
+    if (!mounted) return;
+
+    // WebView 会整个重建的两种情况：脚本集合变了（key 变），或刚从错误页
+    // 回来（ErrorPage 分支把 InAppWebView 摘出过树，原生实例已销毁）。
+    // 两种情况下新实例都自带最新的 initialSettings 与 initialUrlRequest，
+    // 不需要——也不能——走 `_controller`：它指向的是旧的、已经或即将销毁的
+    // 原生实例，碰它就是 `MissingPluginException`，而且异常会打断后面的
+    // `setState`，把人永久卡在错误页上。
+    if (wasShowingError) {
+      setState(() => _failure = null);
+      return;
+    }
+    if (_scriptsKey != keyBefore) return;
+
     await _controller?.setSettings(settings: _settings);
     await _controller?.loadUrl(
       urlRequest: URLRequest(url: WebUri(widget.config.url)),
     );
-    if (mounted) setState(() => _failure = null);
   }
 
   InAppWebViewSettings get _settings => InAppWebViewSettings(
@@ -144,15 +171,38 @@ class WebViewPageState extends State<WebViewPage> {
       );
     }
 
-    // WebView 需要铺满全屏（见设计文档的 全屏 运行时开关），不能像
-    // `ErrorPage` 那样包 SafeArea——那会让内容避开刘海/底部安全区，
-    // 并在横屏或全屏播放视频时产生黑边。
-    return _webView;
+    // 沉浸式状态栏：targetSdk 36 起窗口强制边到边（API 36 上连
+    // windowOptOutEdgeToEdgeEnforcement 都已失效），状态栏透明浮在内容之上，
+    // 网页自己的顶栏会被压在底下。所以让 WebView 从状态栏 inset 下方开始，
+    // 露出的那条用同一个底色填掉，视觉上跟站点顶栏连成一片。
+    //
+    // 用 Padding 而不是 `ErrorPage` 那样的 SafeArea：SafeArea 会连底部手势条
+    // 和横屏两侧的刘海一起避让，播放器上下就多出黑边。这里只让顶部这一处。
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      // 深色底配浅色图标。Android 看 statusBarIconBrightness，iOS 看
+      // statusBarBrightness，两者语义相反，必须都给，否则总有一端是瞎的。
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      ),
+      child: ColoredBox(
+        color: _statusBarBackdrop,
+        child: Padding(
+          // 视频全屏时必须归零：播放器要占满物理屏幕，留着这条 inset
+          // 就是播放器上方的一道黑边。
+          padding: EdgeInsets.only(
+            top: _videoFullscreen ? 0 : MediaQuery.paddingOf(context).top,
+          ),
+          child: _webView,
+        ),
+      ),
+    );
   }
 
   Widget get _webView => InAppWebView(
     // 数量相同、内容不同的脚本切换（关 A 开 B）必须换 key，见 scriptsKey 的注释。
-    key: ValueKey(scriptsKey(_scriptIds)),
+    key: ValueKey(_scriptsKey),
     initialUrlRequest: URLRequest(url: WebUri(widget.config.url)),
     initialSettings: _settings,
     initialUserScripts: UnmodifiableListView(_scripts),
@@ -178,6 +228,9 @@ class WebViewPageState extends State<WebViewPage> {
         source: NetSource.resource,
       ),
     ),
+    // 播放器进出全屏时，顶部那条状态栏留白要跟着让开／回来。
+    onEnterFullscreen: (_) => setState(() => _videoFullscreen = true),
+    onExitFullscreen: (_) => setState(() => _videoFullscreen = false),
     onConsoleMessage: (_, msg) => devLogger.info('[console] ${msg.message}'),
     onReceivedError: (_, request, error) {
       // 每个子资源（图片/XHR/字体……）失败都会触发这个回调，不只是主文档。
