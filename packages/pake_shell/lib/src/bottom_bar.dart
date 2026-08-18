@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:pake_shell/src/widgets/action_button.dart';
 
 /// 浮在网页之上的底部工具栏：后退、刷新、设置。
 ///
@@ -96,17 +97,20 @@ class BottomBar extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _button(
+                      ActionButton(
+                        tapTarget: _tapTarget,
                         icon: Icons.arrow_back,
                         tooltip: 'Back',
                         onPressed: canGoBack ? onBack : null,
                       ),
-                      _button(
+                      ActionButton(
+                        tapTarget: _tapTarget,
                         icon: Icons.refresh,
                         tooltip: 'Reload',
                         onPressed: onReload,
                       ),
-                      _button(
+                      ActionButton(
+                        tapTarget: _tapTarget,
                         icon: Icons.settings_outlined,
                         tooltip: 'Settings',
                         onPressed: onOpenSettings,
@@ -121,22 +125,4 @@ class BottomBar extends StatelessWidget {
       ),
     );
   }
-
-  Widget _button({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback? onPressed,
-  }) => SizedBox(
-    width: _tapTarget,
-    height: _tapTarget,
-    child: IconButton(
-      icon: Icon(icon),
-      tooltip: tooltip,
-      onPressed: onPressed,
-      // IconButton 自带 8 的内边距，会把 24 的图标顶出 56 的格子去撑大 Row。
-      padding: EdgeInsets.zero,
-      color: Colors.white,
-      disabledColor: Colors.white24,
-    ),
-  );
 }
