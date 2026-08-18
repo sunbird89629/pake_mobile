@@ -44,9 +44,10 @@ LoadFailureKind classifyFailure({int? httpStatus, String? errorType}) {
 /// frame" (don't surface an error page) rather than "main frame" — this
 /// matches the plugin's own precedent for its deprecated single-argument
 /// callbacks (`request.isForMainFrame ?? false`), and it fails toward the
-/// bug we are fixing (a hidden sub-resource failure, recoverable via
-/// [ErrorPage]'s settings escape hatch) rather than back into it (an
-/// innocuous sub-resource error blanking out a working page).
+/// bug we are fixing (a hidden sub-resource failure — the page stays up, so
+/// the bottom bar stays up with it and settings is still one tap away)
+/// rather than back into it (an innocuous sub-resource error blanking out a
+/// working page).
 bool shouldSurfaceError({required bool? isForMainFrame}) =>
     isForMainFrame ?? false;
 
@@ -94,7 +95,8 @@ class ErrorPage extends StatelessWidget {
                 const SizedBox(height: 24),
                 FilledButton(onPressed: onRetry, child: const Text('Retry')),
                 const SizedBox(height: 8),
-                // EscapeHatch 是兜底通道，但有明确错误页时应给明确按钮。
+                // 错误页把整棵 WebView 子树换掉了，底部胶囊连同上面的 ⚙
+                // 一起不在树里——这个按钮是错误页上唯一的设置入口，不能省。
                 TextButton(
                   onPressed: onOpenSettings,
                   child: const Text('Open settings'),

@@ -69,6 +69,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: PinGate(
+          locked: ValueNotifier(false),
           config: config,
           timeout: timeout,
           child: const Text('the web page'),
@@ -236,7 +237,11 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: PinGate(config: config, child: const _CountingChild()),
+          home: PinGate(
+            config: config,
+            locked: ValueNotifier(false),
+            child: const _CountingChild(),
+          ),
         ),
       );
 

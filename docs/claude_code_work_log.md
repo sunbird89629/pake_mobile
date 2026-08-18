@@ -4,6 +4,122 @@
 
 ---
 
+## 2026-08-18 底部悬浮工具栏，以及一个失效了很久的 PopScope
+
+设计文档：`docs/superpowers/specs/2026-08-18-bottom-bar-design.md`（决策全过程
+在那里，这里只记排查性质的部分）。
+
+**做了什么**
+
+底部加一条浮在网页之上的胶囊：后退、刷新、设置。上滑隐藏、下滑显示。同时
+接管系统返回键，并删掉了左上角长按 1.5 秒的 `EscapeHatch`。
+
+### 发现：`LockScreen` 的 `PopScope` 一行作用都没有
+
+**现象**
+
+准备加返回键接管时，先去看已有的返回键处理，发现 `lock_screen.dart:23` 有个
+`PopScope(canPop: false)`，注释写着「锁屏不是路由，返回键会穿透到底下被遮住
+的页面上去导航。canPop: false 把它挡住」。
+
+**机制**
+
+`_PopScopeState.didChangeDependencies` 是这么注册的（Flutter 3.41.2
+`pop_scope.dart:190`）：
+
+```dart
+final ModalRoute<dynamic>? nextRoute = ModalRoute.of(context);
+if (nextRoute != _route) {
+  _route?.unregisterPopEntry(this);
+  _route = nextRoute;
+  _route?.registerPopEntry(this);   // ← 空安全，null 就什么都不做
+}
+```
+
+而 `LockScreen` 经 `PinGate` 挂在 `MaterialApp.builder` 上，**在 Navigator
+之上**——`pin_gate.dart` 的类注释自己写了这一点，而且那是它必须待的位置
+（包 `home` 的话，人在设置页里切后台再回来，锁屏会被设置页盖住）。Navigator
+之上没有 `ModalRoute`，`ModalRoute.of(context)` 返回 null，注册没发生，
+`canPop: false` 从来没生效过。
+
+它一直没暴露，是因为壳里没有别的 `PopScope`、也没有可回退的路由：返回键就是
+pop 根路由 = 退出 app。看起来「锁屏挡住了返回键」，其实只是**碰巧**没有可被
+穿透去做的事。
+
+**修法**
+
+`PinGate` 不再自己存 `bool _locked`，改成写一个由 `PakeApp` 持有的
+`ValueNotifier<bool>`；`WebViewPage` 读它，返回键处理器在锁着时直接 return。
+
+```dart
+canPop: !locked && !_canGoBack,
+onPopInvokedWithResult: (didPop, _) {
+  if (didPop || locked) return;
+  _controller?.goBack();
+},
+```
+
+`canPop` 而不是「一律拦下再自己调 `SystemNavigator.pop()`」：没锁且没历史时
+放行，由框架 pop 根路由 = 退出 app，少一个 API。
+
+没去修 `LockScreen` 那个 `PopScope`——它在 Navigator 之上，位置本身没法改，
+`PopScope` 在那儿注定失效。挡返回键只能挡在有 `ModalRoute` 的那一侧。
+
+**验证点**：`docs/manual-regression.md` 里那条加粗的——锁屏亮着时按系统返回
+键，什么都不做，解锁后页面没变。这条自动化测不了（`InAppWebView` 是平台
+视图）。
+
+### 刷新按钮不能复用 `reloadWithCurrentSettings()`
+
+差一点就绑上去了。那个方法最后一行是
+`loadUrl(URLRequest(url: WebUri(widget.config.url)))`——加载的是**配置里的
+首页 URL**，不是当前页。设置页调它是对的（改完 UA/脚本要从头来），绑到刷新
+按钮上就是：用户在站内点进第三层详情页，按一下「刷新」被扔回首页。
+
+改用 `_controller?.reload()`。代价是刷新按钮不会重新应用刚改的设置——这是
+对的，设置页保存时自己已经调过 `reloadWithCurrentSettings()` 了。
+
+### 删掉 `EscapeHatch` 导出的一条硬约束
+
+`EscapeHatch` 是左上角 44×44 的长按识别区，正好压在移动站放汉堡菜单和返回
+按钮的位置——在那儿长按网页里的链接或图片会打开设置，而不是弹出网页的上下文
+菜单（`translucent` 只保证短按穿透，长按会被抢走）。删掉它是为了消掉这个
+冲突，代价是设置只剩胶囊上的 ⚙ 和错误页那个按钮。
+
+由此导出：**这条栏绝不能做成可配置关闭**。一旦允许关掉，用户在设置页关掉
+它 → 退出设置 → 没有任何入口能再打开设置 → 只能卸载重装。这是不可逆的自我
+锁死，已写进 `bottom_bar.dart` 的类注释和 README。
+
+同一类的死锁还有一个，已经堵掉：在长页面滑下去把栏藏了，再点进一个短到不能
+滚动的页面——那个页面永远不触发 `onScrollChanged`，栏就再也出不来。所以
+`onLoadStop` / `onUpdateVisitedHistory` 里无条件把栏重置为显示。
+
+### 关于回归测试
+
+`WebViewPage` 整体仍然测不了（`InAppWebView` 是平台视图）。所以：
+
+- 滚动判定抽成顶层纯函数 `barStateAfterScroll`，6 个用例覆盖阈值、翻转、
+  重新锚定、顶部强制显示、边界。跟 `scriptsKey` / `shouldSurfaceError` /
+  `classifyFailure` 是同一个套路。
+- `BottomBar` 是纯 `StatelessWidget`，5 个 widget test 覆盖回调、禁用态、
+  隐藏时不吃事件、位移。
+- 动画与滚动的联动、返回键、锁屏交互——只能真机手验，条目已进
+  `docs/manual-regression.md`。
+
+写第一版边界用例时自己写错了：`step(y: 48, anchor: 900, visible: false)` 断言
+「不显示」，但那是从 900 往上滑到 48，本来就该显示。改成两边都用同一次「向下
+滑 18px」、只让落点跨过 48，边界才真被测到。
+
+**两个读代码确定不了、必须真机校准的**
+
+1. `onScrollChanged` 的 `y` 单位。Android 原生 `WebView.onScrollChanged` 给的
+   是设备像素，插件是否转成逻辑像素没在源码里确认到。若是设备像素，10px
+   阈值在 3x 屏上会过于灵敏。
+2. 内层滚动容器。滚在内层 `div` 而非 document 上的站点不触发
+   `onScrollChanged`，「上滑隐藏」不生效（不会砖，栏保持可见）。
+
+---
+
 ## 2026-08-17 沉浸式状态栏
 
 **现象**

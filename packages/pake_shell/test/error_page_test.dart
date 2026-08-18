@@ -44,8 +44,9 @@ void main() {
 
     test('treats a null isForMainFrame as not main frame', () {
       // 两个平台实测都会填这个字段（见 shouldSurfaceError 上的注释），null
-      // 理论上不会发生；万一发生，宁可漏报（EscapeHatch 仍能兜底）也不要
-      // 重犯"子资源失败盖掉整页"这个 bug。
+      // 理论上不会发生；万一发生，宁可漏报也不要重犯"子资源失败盖掉整页"
+      // 这个 bug——漏报时不显示错误页，WebViewPage 那棵树还在，底部栏也就
+      // 还在，设置仍然点得到。
       expect(shouldSurfaceError(isForMainFrame: null), isFalse);
     });
   });

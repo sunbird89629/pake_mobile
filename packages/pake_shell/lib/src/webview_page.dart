@@ -1,15 +1,51 @@
 import 'dart:collection';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:logger_utils/logger_utils.dart';
 
+import 'bottom_bar.dart';
 import 'error_page.dart';
 import 'net/net_log.dart';
 import 'net/net_record.dart';
 import 'runtime_config.dart';
+
+/// 底部栏翻转显隐所需的累计位移，逻辑像素。
+///
+/// 逐像素反应会让手指微抖就闪烁，所以要攒够一次「明确的滑动意图」才动。
+const _barScrollThreshold = 10;
+
+/// 滚动一步之后，底部栏该显示还是隐藏，以及新的比较锚点。
+///
+/// [y] 是当前纵向滚动位置，[anchor] 是上次翻转时记下的位置，[visible] 是当前
+/// 状态，[barHeight] 是「算不算在页面顶部」的阈值。
+///
+/// 抽成纯函数是因为 `WebViewPage` 整体测不了（`InAppWebView` 是平台视图），
+/// 而这段判定是整个特性里唯一有分支的逻辑——跟 [scriptsKey]、
+/// `shouldSurfaceError`、`classifyFailure` 一样，放在这里换来可测。
+({bool visible, int anchor}) barStateAfterScroll({
+  required int y,
+  required int anchor,
+  required bool visible,
+  required double barHeight,
+}) {
+  // 顶部无条件显示。用户找不到入口时的本能动作就是一路滑到顶，没有这条
+  // 他会在顶部却看不到栏，以为坏了。
+  if (y < barHeight) return (visible: true, anchor: y);
+
+  final delta = y - anchor;
+  // 攒不够阈值就连锚点都不动——锚点必须留在原地继续累计，否则永远攒不满。
+  if (delta.abs() < _barScrollThreshold) {
+    return (visible: visible, anchor: anchor);
+  }
+
+  // 下滑（y 变大）隐藏，上滑（y 变小）显示。翻转后锚点归到当前位置，下一次
+  // 判定从这里重新累计，避免锚点被甩在很远的地方。
+  return (visible: delta < 0, anchor: y);
+}
 
 /// 当前生效脚本集合的稳定 key。
 ///
@@ -27,10 +63,20 @@ class WebViewPage extends StatefulWidget {
     super.key,
     required this.config,
     required this.onOpenSettings,
+    required this.locked,
   });
 
   final RuntimeConfig config;
   final VoidCallback onOpenSettings;
+
+  /// 应用锁当前是不是锁着的，由 `PinGate` 写、这里只读。
+  ///
+  /// 这个耦合是真实存在的语义依赖——「锁着的时候不响应导航」——而不是顺手
+  /// 传下来的。`LockScreen` 自己那个 `PopScope(canPop: false)` 挂在
+  /// `MaterialApp.builder` 里、在 Navigator **之上**，`ModalRoute.of` 返回
+  /// null，`_PopScopeState` 的注册是空安全的，所以它一行作用都没有。挡返回
+  /// 键只能挡在这里。
+  final ValueListenable<bool> locked;
 
   @override
   State<WebViewPage> createState() => WebViewPageState();
@@ -44,6 +90,15 @@ class WebViewPageState extends State<WebViewPage> {
   /// 页面进了视频全屏（`WebChromeClient.onShowCustomView`）。此时不能再给
   /// 顶部留状态栏的位置，否则播放器上方挂一道黑边。
   bool _videoFullscreen = false;
+
+  /// 底部栏是否可见，以及上次翻转时的滚动位置。见 [barStateAfterScroll]。
+  bool _barVisible = true;
+  int _scrollAnchor = 0;
+
+  /// 网页还有没有可回退的历史。`canGoBack()` 是异步的平台往返，不能在
+  /// `build` 里同步读，只能在导航事件里查一次存下来。因此它永远滞后一帧
+  /// 左右——人眼看不出来，但测试里要 `pumpAndSettle` 而不是 `pump`。
+  bool _canGoBack = false;
 
   /// 状态栏那条留白的底色。
   ///
@@ -159,8 +214,39 @@ class WebViewPageState extends State<WebViewPage> {
     supportZoom: false,
   );
 
+  /// 导航到了新地址（含 SPA 的 pushState/replaceState/hash 变化）。
+  Future<void> _onNavigated(InAppWebViewController controller) async {
+    final canGoBack = await controller.canGoBack();
+    if (!mounted) return;
+    setState(() {
+      _canGoBack = canGoBack;
+      // 换页必须把栏放出来。否则：在长页面滑下去把栏藏了，再点进一个短到
+      // 不能滚动的页面——那个页面永远不触发 onScrollChanged，栏就再也出不
+      // 来，用户在那一页既没有后退也没有设置。
+      _barVisible = true;
+      _scrollAnchor = 0;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: widget.locked,
+      builder: (context, locked, _) => PopScope(
+        // 没锁且没有网页历史时放行，由框架 pop 根路由 = 退出 app，不必自己
+        // 调 SystemNavigator.pop。锁着时一律拦下且什么都不做——见
+        // `WebViewPage.locked` 上关于 LockScreen 那个失效 PopScope 的说明。
+        canPop: !locked && !_canGoBack,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop || locked) return;
+          _controller?.goBack();
+        },
+        child: _body(context),
+      ),
+    );
+  }
+
+  Widget _body(BuildContext context) {
     final failure = _failure;
     if (failure != null) {
       return ErrorPage(
@@ -194,7 +280,33 @@ class WebViewPageState extends State<WebViewPage> {
           padding: EdgeInsets.only(
             top: _videoFullscreen ? 0 : MediaQuery.paddingOf(context).top,
           ),
-          child: _webView,
+          child: Stack(
+            // expand 而不是默认的 loose：loose 下 `_webView` 拿到的是宽松
+            // 约束，撑不撑满取决于 PlatformView 自己的定尺行为。这里要的是
+            // 「网页铺满，胶囊浮在上面」，就把它钉死。
+            fit: StackFit.expand,
+            children: [
+              _webView,
+              Positioned(
+                left: 0,
+                right: 0,
+                // 坐在系统手势条**之上**，栏下方露出一条网页。贴着物理底边
+                // 会让栏的背景垫住手势条，看着更整，但那样它就不像浮层了。
+                bottom: MediaQuery.viewPaddingOf(context).bottom + 8,
+                child: BottomBar(
+                  // 视频全屏时一并收走：播放器要占满物理屏幕。
+                  visible: _barVisible && !_videoFullscreen,
+                  canGoBack: _canGoBack,
+                  onBack: () => _controller?.goBack(),
+                  // 不是 reloadWithCurrentSettings：那个方法最后会 loadUrl
+                  // 到配置里的**首页** URL，绑在刷新上会把深层页面的用户扔
+                  // 回首页。刷新就是重载当前页。
+                  onReload: () => _controller?.reload(),
+                  onOpenSettings: widget.onOpenSettings,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -228,6 +340,27 @@ class WebViewPageState extends State<WebViewPage> {
         source: NetSource.resource,
       ),
     ),
+    // WebView 是平台视图，Flutter 的手势竞技场看不到它内部的触摸，所以这是
+    // 判断滑动方向的唯一信号源（Android: WebView.onScrollChanged，
+    // iOS: UIScrollViewDelegate.scrollViewDidScroll，都是原生实现）。
+    onScrollChanged: (_, x, y) {
+      final next = barStateAfterScroll(
+        y: y,
+        anchor: _scrollAnchor,
+        visible: _barVisible,
+        barHeight: BottomBar.height,
+      );
+      _scrollAnchor = next.anchor;
+      // 这个回调每几毫秒就来一次，只有真翻转了才能 setState。
+      if (next.visible != _barVisible) {
+        setState(() => _barVisible = next.visible);
+      }
+    },
+    onLoadStop: (controller, _) => _onNavigated(controller),
+    // 连 SPA 的 pushState/replaceState/hash 变化都会触发——目标站点基本都是
+    // SPA，只靠 onLoadStop 会漏掉站内的绝大多数跳转。
+    onUpdateVisitedHistory: (controller, url, isReload) =>
+        _onNavigated(controller),
     // 播放器进出全屏时，顶部那条状态栏留白要跟着让开／回来。
     onEnterFullscreen: (_) => setState(() => _videoFullscreen = true),
     onExitFullscreen: (_) => setState(() => _videoFullscreen = false),
