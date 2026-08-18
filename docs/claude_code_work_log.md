@@ -94,6 +94,26 @@ onPopInvokedWithResult: (didPop, _) {
 滚动的页面——那个页面永远不触发 `onScrollChanged`，栏就再也出不来。所以
 `onLoadStop` / `onUpdateVisitedHistory` 里无条件把栏重置为显示。
 
+### 视觉定稿：从不透明胶囊改成毛玻璃圆角矩形
+
+先按「不透明深色胶囊」实现，然后在设计画布上比了四个方向（Slate / Docked /
+Frosted / Vibrant），选定 Frosted，形状从全圆胶囊改成圆角矩形，尺寸整体放大。
+最终值见设计文档的「视觉定稿」一节。
+
+两个实现上的坑：
+
+- **投影和模糊在裁剪的两侧**。`BackdropFilter` 必须被 `ClipRRect` 包住，否则
+  它去模糊整个屏幕；而投影画在 `ClipRRect` 里会被裁掉，只能挂在外层
+  `DecoratedBox` 上。两层的圆角半径要一致。
+- **`IconButton` 自带 8 的内边距**。把 24 的图标塞进 56 的格子时，这 8 会把
+  内容顶出去撑大 `Row`，在钉死 208 宽的容器里直接溢出。`padding:
+  EdgeInsets.zero` 才对。
+
+**没有跟随网页深浅的逻辑，这是决定不是遗漏。** 壳拿不到可靠信号判断当前页面
+是深是浅——唯一能读的是网页的 `<meta name="theme-color">`，很多站点根本不给。
+目标站点多是深色，钉死深色玻璃 + 白图标；浅色网页上对比度会下降，这是选毛
+玻璃就得接受的代价。
+
 ### 关于回归测试
 
 `WebViewPage` 整体仍然测不了（`InAppWebView` 是平台视图）。所以：

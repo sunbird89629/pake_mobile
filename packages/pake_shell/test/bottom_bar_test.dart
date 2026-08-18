@@ -82,5 +82,26 @@ void main() {
         const Offset(0, 2),
       );
     });
+
+    testWidgets('every tap target clears the 44px floor', (tester) async {
+      // 栏宽是钉死的（208），三个格子必须塞得进去；同时不能为了塞进去
+      // 把格子缩到手指点不准。44 是移动端触控下限，不是审美问题。
+      await pump(tester);
+
+      for (final icon in [
+        Icons.arrow_back,
+        Icons.refresh,
+        Icons.settings_outlined,
+      ]) {
+        final size = tester.getSize(
+          find.ancestor(
+            of: find.byIcon(icon),
+            matching: find.byType(IconButton),
+          ),
+        );
+        expect(size.width, greaterThanOrEqualTo(44));
+        expect(size.height, greaterThanOrEqualTo(44));
+      }
+    });
   });
 }
