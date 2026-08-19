@@ -91,6 +91,13 @@ class WebViewPageState extends State<WebViewPage> {
   /// 顶部留状态栏的位置，否则播放器上方挂一道黑边。
   bool _videoFullscreen = false;
 
+  /// 主文档加载进度，0-100。
+  ///
+  /// 用 `ValueNotifier` 而不是 `setState`：一次加载 `onProgressChanged` 会来
+  /// 几十次，`setState` 就把整棵子树（含 `BottomBar` 和平台视图外壳）重建同样
+  /// 次数。跟 `onScrollChanged` 那里同一个考量——只让进度条自己重建。
+  final _progress = ValueNotifier<int>(0);
+
   /// 底部栏是否可见，以及上次翻转时的滚动位置。见 [barStateAfterScroll]。
   bool _barVisible = true;
   int _scrollAnchor = 0;
@@ -128,6 +135,7 @@ class WebViewPageState extends State<WebViewPage> {
 
   @override
   void dispose() {
+    _progress.dispose();
     netLog.dispose();
     super.dispose();
   }
@@ -287,6 +295,9 @@ class WebViewPageState extends State<WebViewPage> {
             fit: StackFit.expand,
             children: [
               _webView,
+              // 贴在网页内容顶边（状态栏留白已经由外层 Padding 让开），跟浏览
+              // 器的位置惯例一致。
+              Positioned(top: 0, left: 0, right: 0, child: _progressBar),
               Positioned(
                 left: 0,
                 right: 0,
@@ -311,6 +322,26 @@ class WebViewPageState extends State<WebViewPage> {
       ),
     );
   }
+
+  /// 顶部加载进度条。加载完成后淡出而不是立刻消失——`onProgressChanged` 到
+  /// 100 和页面真正可读之间还差最后一次渲染，立刻抽走会让人觉得条走完了页面
+  /// 还是空的。
+  Widget get _progressBar => ValueListenableBuilder<int>(
+    valueListenable: _progress,
+    builder: (context, progress, _) => IgnorePointer(
+      // 不挡住网页顶边那 2px：站点的顶栏按钮就在那儿。
+      child: AnimatedOpacity(
+        opacity: progress >= 100 || _videoFullscreen ? 0 : 1,
+        duration: const Duration(milliseconds: 250),
+        child: LinearProgressIndicator(
+          value: progress / 100,
+          minHeight: 2,
+          // 默认的浅色轨道在深色站点上是一条贯穿全宽的亮杠，比进度本身还显眼。
+          backgroundColor: Colors.transparent,
+        ),
+      ),
+    ),
+  );
 
   Widget get _webView => InAppWebView(
     // 数量相同、内容不同的脚本切换（关 A 开 B）必须换 key，见 scriptsKey 的注释。
@@ -356,6 +387,7 @@ class WebViewPageState extends State<WebViewPage> {
         setState(() => _barVisible = next.visible);
       }
     },
+    onProgressChanged: (_, progress) => _progress.value = progress,
     onLoadStop: (controller, _) => _onNavigated(controller),
     // 连 SPA 的 pushState/replaceState/hash 变化都会触发——目标站点基本都是
     // SPA，只靠 onLoadStop 会漏掉站内的绝大多数跳转。
