@@ -2,7 +2,7 @@ import 'package:debug_sheet/debug_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:pake_config/pake_config.dart';
 
-import 'lock/pin_dialog.dart';
+import 'lock/pattern_dialog.dart';
 import 'log_page.dart';
 import 'net/net_log.dart';
 import 'net/net_log_page.dart';
@@ -107,28 +107,28 @@ class _DebugDrawerState extends State<DebugDrawer> {
 
   /// 取消对话框就什么都不写——开关下一次 build 读回 false，自己弹回去。
   Future<void> _enableAppLock() async {
-    final pin = await showPinDialog(context);
-    if (pin == null) return;
+    final hash = await showPatternDialog(context);
+    if (hash == null) return;
 
     _config
-      ..pinCode = pin
+      ..patternHash = hash
       ..appLockEnabled = true;
     setState(() {});
   }
 
-  /// 不二次验证：人能站在设置页里，说明刚才已经输对过 PIN 了。
+  /// 不二次验证：人能站在设置页里，说明刚才已经画对过图案了。
   void _disableAppLock() {
     _config
       ..appLockEnabled = false
-      ..pinCode = null;
+      ..patternHash = null;
     setState(() {});
   }
 
-  Future<void> _changePin() async {
-    final pin = await showPinDialog(context);
-    if (pin == null) return;
+  Future<void> _changePattern() async {
+    final hash = await showPatternDialog(context);
+    if (hash == null) return;
 
-    _config.pinCode = pin;
+    _config.patternHash = hash;
     setState(() {});
   }
 
@@ -201,7 +201,7 @@ class _DebugDrawerState extends State<DebugDrawer> {
             key: const ValueKey('appLock'),
             title: const Text('App lock'),
             subtitle: const Text(
-              'Asks for a PIN on launch and after 30 seconds in the '
+              'Asks for a pattern on launch and after 30 seconds in the '
               'background. Forgetting it means clearing app data — there is '
               'no recovery.',
             ),
@@ -210,10 +210,10 @@ class _DebugDrawerState extends State<DebugDrawer> {
           ),
           if (_config.appLockEnabled)
             ListTile(
-              key: const ValueKey('changePin'),
-              title: const Text('Change PIN'),
-              leading: const Icon(Icons.password),
-              onTap: _changePin,
+              key: const ValueKey('changePattern'),
+              title: const Text('Change pattern'),
+              leading: const Icon(Icons.pattern),
+              onTap: _changePattern,
             ),
           const Divider(),
           ListTile(

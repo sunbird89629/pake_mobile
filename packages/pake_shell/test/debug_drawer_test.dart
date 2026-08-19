@@ -6,8 +6,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:pake_config/pake_config.dart';
 import 'package:pake_shell/src/debug_drawer.dart';
+import 'package:pake_shell/src/lock/pattern_code.dart';
 import 'package:pake_shell/src/net/net_log.dart';
 import 'package:pake_shell/src/runtime_config.dart';
+
+import 'support/draw_pattern.dart';
 
 const _buildTime = PakeConfig(
   name: 'Weibo',
@@ -15,6 +18,10 @@ const _buildTime = PakeConfig(
   bundleId: 'com.pake.weibo',
   injectScripts: ['hide-ads.js', 'fix-video.js'],
 );
+
+/// 设置用的图案，以及改成的另一个。
+const _first = [0, 1, 2, 5];
+const _second = [6, 7, 8, 5];
 
 void main() {
   late RuntimeConfig config;
@@ -185,31 +192,30 @@ void main() {
         find.byKey(const ValueKey('appLock')),
       );
       expect(sw.value, isFalse);
-      expect(find.byKey(const ValueKey('changePin')), findsNothing);
+      expect(find.byKey(const ValueKey('changePattern')), findsNothing);
     });
 
-    testWidgets('turning it on asks for a pin and persists both', (
+    testWidgets('turning it on asks for a pattern and persists both', (
       tester,
     ) async {
       await pump(tester);
 
       await tester.tap(find.byKey(const ValueKey('appLock')));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byKey(const ValueKey('newPin')), '1234');
-      await tester.enterText(find.byKey(const ValueKey('confirmPin')), '1234');
-      await tester.tap(find.text('Save'));
-      await tester.pumpAndSettle();
+      // 画两遍：第一遍记下，第二遍确认。
+      await drawPattern(tester, _first);
+      await drawPattern(tester, _first);
 
       expect(config.appLockEnabled, isTrue);
-      expect(config.pinCode, 1234);
+      expect(config.patternHash, hashPattern(_first));
       await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('changePin')),
+        find.byKey(const ValueKey('changePattern')),
         200,
       );
-      expect(find.byKey(const ValueKey('changePin')), findsOneWidget);
+      expect(find.byKey(const ValueKey('changePattern')), findsOneWidget);
     });
 
-    testWidgets('cancelling the pin dialog leaves the lock off', (
+    testWidgets('cancelling the pattern dialog leaves the lock off', (
       tester,
     ) async {
       await pump(tester);
@@ -220,45 +226,43 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(config.appLockEnabled, isFalse);
-      expect(config.pinCode, isNull);
+      expect(config.patternHash, isNull);
       final sw = tester.widget<SwitchListTile>(
         find.byKey(const ValueKey('appLock')),
       );
       expect(sw.value, isFalse, reason: '开关必须弹回去');
     });
 
-    testWidgets('turning it off clears the pin', (tester) async {
+    testWidgets('turning it off clears the pattern', (tester) async {
       config
         ..appLockEnabled = true
-        ..pinCode = 1234;
+        ..patternHash = hashPattern(_first);
       await pump(tester);
 
       await tester.tap(find.byKey(const ValueKey('appLock')));
       await tester.pumpAndSettle();
 
       expect(config.appLockEnabled, isFalse);
-      expect(config.pinCode, isNull);
+      expect(config.patternHash, isNull);
     });
 
-    testWidgets('changing the pin keeps the lock on', (tester) async {
+    testWidgets('changing the pattern keeps the lock on', (tester) async {
       config
         ..appLockEnabled = true
-        ..pinCode = 1234;
+        ..patternHash = hashPattern(_first);
       await pump(tester);
 
       await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('changePin')),
+        find.byKey(const ValueKey('changePattern')),
         200,
       );
-      await tester.tap(find.byKey(const ValueKey('changePin')));
+      await tester.tap(find.byKey(const ValueKey('changePattern')));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byKey(const ValueKey('newPin')), '5678');
-      await tester.enterText(find.byKey(const ValueKey('confirmPin')), '5678');
-      await tester.tap(find.text('Save'));
-      await tester.pumpAndSettle();
+      await drawPattern(tester, _second);
+      await drawPattern(tester, _second);
 
       expect(config.appLockEnabled, isTrue);
-      expect(config.pinCode, 5678);
+      expect(config.patternHash, hashPattern(_second));
     });
   });
 }

@@ -45,16 +45,19 @@ class RuntimeConfig {
   set appLockEnabled(bool value) =>
       _box.write(RuntimeKeys.appLockEnabled, value);
 
-  /// `null` = 没设过。读到非 int（人手改过、旧版本遗留）同样当没设——
-  /// 一个残缺的存储状态不该把人锁在 app 外面。
-  int? get pinCode {
-    final value = _box.read<Object?>(RuntimeKeys.pinCode);
-    return value is int ? value : null;
+  /// 手势图案的 SHA-256 摘要，`null` = 没设过。
+  ///
+  /// 读到非 String、或长度不是 64（人手改过、存储损坏）同样当没设——一个
+  /// 残缺的存储状态不该把人永久锁在 app 外面，而一个永远匹配不上的哈希
+  /// 正是那种状态。
+  String? get patternHash {
+    final value = _box.read<Object?>(RuntimeKeys.patternHash);
+    return value is String && value.length == 64 ? value : null;
   }
 
-  set pinCode(int? value) => value == null
-      ? _box.remove(RuntimeKeys.pinCode)
-      : _box.write(RuntimeKeys.pinCode, value);
+  set patternHash(String? value) => value == null
+      ? _box.remove(RuntimeKeys.patternHash)
+      : _box.write(RuntimeKeys.patternHash, value);
 
   /// 默认全开——构建时特意打包进来的脚本，默认不生效才是意外。
   ///
@@ -85,7 +88,7 @@ class RuntimeConfig {
       RuntimeKeys.fullscreen,
       RuntimeKeys.captureNetwork,
       RuntimeKeys.appLockEnabled,
-      RuntimeKeys.pinCode,
+      RuntimeKeys.patternHash,
     ]) {
       _box.remove(key);
     }

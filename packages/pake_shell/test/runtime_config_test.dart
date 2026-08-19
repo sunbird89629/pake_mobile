@@ -13,6 +13,10 @@ const _buildTime = PakeConfig(
   injectScripts: ['hide-ads.js'],
 );
 
+/// 64 个十六进制字符——长度是 `patternHash` getter 的校验条件之一。
+const _hash =
+    '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+
 void main() {
   setUp(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -151,34 +155,41 @@ void main() {
     final c = RuntimeConfig.fromBuildTime(_buildTime);
 
     expect(c.appLockEnabled, isFalse);
-    expect(c.pinCode, isNull);
+    expect(c.patternHash, isNull);
   });
 
-  test('the pin and the switch persist across instances', () {
+  test('the pattern hash and the switch persist across instances', () {
     RuntimeConfig.fromBuildTime(_buildTime)
       ..appLockEnabled = true
-      ..pinCode = 1234;
+      ..patternHash = _hash;
 
     final c = RuntimeConfig.fromBuildTime(_buildTime);
 
     expect(c.appLockEnabled, isTrue);
-    expect(c.pinCode, 1234);
+    expect(c.patternHash, _hash);
   });
 
-  test('a corrupt pin reads as unset instead of locking the user out', () {
-    GetStorage().write(RuntimeKeys.pinCode, 'not-a-number');
+  test('a corrupt hash reads as unset instead of locking the user out', () {
+    // 一个永远匹配不上的哈希就是把人永久锁在外面。宁可当没设过。
+    GetStorage().write(RuntimeKeys.patternHash, 'not-a-hash');
 
-    expect(RuntimeConfig.fromBuildTime(_buildTime).pinCode, isNull);
+    expect(RuntimeConfig.fromBuildTime(_buildTime).patternHash, isNull);
+  });
+
+  test('a non-string hash reads as unset too', () {
+    GetStorage().write(RuntimeKeys.patternHash, 1234);
+
+    expect(RuntimeConfig.fromBuildTime(_buildTime).patternHash, isNull);
   });
 
   test('reset clears the app lock', () {
     final c = RuntimeConfig.fromBuildTime(_buildTime)
       ..appLockEnabled = true
-      ..pinCode = 1234;
+      ..patternHash = _hash;
 
     c.reset();
 
     expect(c.appLockEnabled, isFalse);
-    expect(c.pinCode, isNull);
+    expect(c.patternHash, isNull);
   });
 }

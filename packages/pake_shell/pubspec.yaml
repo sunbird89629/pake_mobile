@@ -31,12 +31,15 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  crypto: ^3.0.6
   flutter_inappwebview: ^6.2.0-beta.3
   get_storage: ^2.1.1
   path_provider: ^2.1.6
-  pin_lock_screen: ^1.0.1
   pake_config:
     path: ../pake_config
+  better_pattern_lock:
+    git:
+      url: https://github.com/sunbird89629/better_pattern_lock.git
   debug_sheet:
     git:
       url: https://github.com/sunbird89629/debug_sheet.git

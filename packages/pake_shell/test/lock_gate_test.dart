@@ -5,7 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:pake_config/pake_config.dart';
-import 'package:pake_shell/src/lock/pin_gate.dart';
+import 'package:pake_shell/src/lock/pattern_code.dart';
+import 'package:pake_shell/src/lock/lock_gate.dart';
+
+import 'support/draw_pattern.dart';
 import 'package:pake_shell/src/runtime_config.dart';
 
 const _buildTime = PakeConfig(
@@ -35,6 +38,9 @@ class _CountingChildState extends State<_CountingChild> {
   @override
   Widget build(BuildContext context) => const Text('the web page');
 }
+
+/// 测试用的正确图案。左上→右上那一行再拐一格，四个点刚好够 minPatternLength。
+const _correct = [0, 1, 2, 5];
 
 void main() {
   late RuntimeConfig config;
@@ -68,7 +74,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: PinGate(
+        home: LockGate(
           locked: ValueNotifier(false),
           config: config,
           timeout: timeout,
@@ -81,7 +87,7 @@ void main() {
   Future<void> leaveAndReturn(WidgetTester tester, Duration away) async {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     // 必须用 runAsync：testWidgets 默认跑在 FakeAsync 里，`tester.pump(d)`
-    // 只推进假时钟，而 PinGate 算的是 `DateTime.now()` 的真实时间差——
+    // 只推进假时钟，而 LockGate 算的是 `DateTime.now()` 的真实时间差——
     // 假时钟推得再多，那个差值也是 0。runAsync 里时间是真的会走的。
     await tester.runAsync(() => Future<void>.delayed(away));
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
@@ -97,7 +103,7 @@ void main() {
   testWidgets('locks on a cold start when the lock is on', (tester) async {
     config
       ..appLockEnabled = true
-      ..pinCode = 1234;
+      ..patternHash = hashPattern(_correct);
 
     await pump(tester);
 
@@ -117,13 +123,10 @@ void main() {
   testWidgets('the correct pin reveals the page', (tester) async {
     config
       ..appLockEnabled = true
-      ..pinCode = 1234;
+      ..patternHash = hashPattern(_correct);
     await pump(tester);
 
-    for (final d in '1234'.split('')) {
-      await tester.tap(find.text(d));
-      await tester.pump();
-    }
+    await drawPattern(tester, _correct);
     await tester.pump();
 
     expect(find.text('the web page'), findsOneWidget);
@@ -132,12 +135,9 @@ void main() {
   testWidgets('a short trip to the background does not lock', (tester) async {
     config
       ..appLockEnabled = true
-      ..pinCode = 1234;
+      ..patternHash = hashPattern(_correct);
     await pump(tester, timeout: const Duration(milliseconds: 200));
-    for (final d in '1234'.split('')) {
-      await tester.tap(find.text(d));
-      await tester.pump();
-    }
+    await drawPattern(tester, _correct);
 
     await leaveAndReturn(tester, const Duration(milliseconds: 20));
 
@@ -147,12 +147,9 @@ void main() {
   testWidgets('staying away past the timeout locks again', (tester) async {
     config
       ..appLockEnabled = true
-      ..pinCode = 1234;
+      ..patternHash = hashPattern(_correct);
     await pump(tester, timeout: const Duration(milliseconds: 100));
-    for (final d in '1234'.split('')) {
-      await tester.tap(find.text(d));
-      await tester.pump();
-    }
+    await drawPattern(tester, _correct);
 
     await leaveAndReturn(tester, const Duration(milliseconds: 150));
 
@@ -168,12 +165,9 @@ void main() {
       // 把人错误地锁在外面。
       config
         ..appLockEnabled = true
-        ..pinCode = 1234;
+        ..patternHash = hashPattern(_correct);
       await pump(tester, timeout: const Duration(milliseconds: 100));
-      for (final d in '1234'.split('')) {
-        await tester.tap(find.text(d));
-        await tester.pump();
-      }
+      await drawPattern(tester, _correct);
 
       // 短暂离开又回来，没有超时，不该锁。
       await leaveAndReturn(tester, const Duration(milliseconds: 20));
@@ -206,7 +200,7 @@ void main() {
     // 全程前台：直接在 config 上开锁、设 PIN，没有任何生命周期事件。
     config
       ..appLockEnabled = true
-      ..pinCode = 1234;
+      ..patternHash = hashPattern(_correct);
     await tester.pump();
 
     // 没有新的 paused——直接等过超时时长，再发一次 resumed。
@@ -229,7 +223,7 @@ void main() {
       // 挂载过一次：锁屏只能是盖在上面，不能是换掉它。
       config
         ..appLockEnabled = true
-        ..pinCode = 1234;
+        ..patternHash = hashPattern(_correct);
       tester.view.physicalSize = const Size(1080, 2400);
       tester.view.devicePixelRatio = 3.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -237,7 +231,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: PinGate(
+          home: LockGate(
             config: config,
             locked: ValueNotifier(false),
             child: const _CountingChild(),
@@ -251,10 +245,7 @@ void main() {
       expect(find.text('the web page'), findsNothing);
       expect(find.text('Weibo'), findsOneWidget);
 
-      for (final d in '1234'.split('')) {
-        await tester.tap(find.text(d));
-        await tester.pump();
-      }
+      await drawPattern(tester, _correct);
       await tester.pump();
 
       // 解锁后锁屏消失、child 露出来——但不是重新挂载的那一个。

@@ -8,8 +8,8 @@ import 'lock_screen.dart';
 /// 挂在 `MaterialApp.builder` 上，位置在 Navigator 之上——遮罩因此能盖住
 /// 任何已经 push 出来的路由（比如设置页）。包 `home` 是不行的：人在设置页
 /// 里切后台再回来，锁屏会被设置页盖住，等于没锁。
-class PinGate extends StatefulWidget {
-  const PinGate({
+class LockGate extends StatefulWidget {
+  const LockGate({
     super.key,
     required this.config,
     required this.child,
@@ -22,7 +22,7 @@ class PinGate extends StatefulWidget {
 
   /// 锁定状态的唯一真相，由外面（`PakeApp`）持有、这里独家写入。
   ///
-  /// 之所以不留成 `_PinGateState` 的私有 bool：`WebViewPage` 接管了系统返回
+  /// 之所以不留成 `_LockGateState` 的私有 bool：`WebViewPage` 接管了系统返回
   /// 键，锁着的时候必须让返回键失效，否则会去调下面那个被遮住的 WebView 的
   /// `goBack()`——用户看不见，解锁后发现页面变了。`LockScreen` 自己那个
   /// `PopScope(canPop: false)` 拦不住，它在 Navigator 之上，
@@ -34,10 +34,10 @@ class PinGate extends StatefulWidget {
   final Duration timeout;
 
   @override
-  State<PinGate> createState() => _PinGateState();
+  State<LockGate> createState() => _LockGateState();
 }
 
-class _PinGateState extends State<PinGate> with WidgetsBindingObserver {
+class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
   DateTime? _pausedAt;
 
   @override
@@ -46,7 +46,7 @@ class _PinGateState extends State<PinGate> with WidgetsBindingObserver {
     // 在第一次 build 之前写，此时还没有 ValueListenableBuilder 在听，不会
     // 触发「build 期间通知监听者」。
     widget.locked.value =
-        widget.config.appLockEnabled && widget.config.pinCode != null;
+        widget.config.appLockEnabled && widget.config.patternHash != null;
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -76,7 +76,7 @@ class _PinGateState extends State<PinGate> with WidgetsBindingObserver {
 
     // 每次都读实时值：设置页刚关掉锁，这里立刻就能看到，不需要通知机制。
     final config = widget.config;
-    if (!config.appLockEnabled || config.pinCode == null) return;
+    if (!config.appLockEnabled || config.patternHash == null) return;
 
     // 后台里 Timer 不保证继续跑（进程可能被冻结），只能记时间戳、回来算差。
     if (DateTime.now().difference(pausedAt) >= widget.timeout) {
@@ -93,8 +93,8 @@ class _PinGateState extends State<PinGate> with WidgetsBindingObserver {
   }
 
   Widget _build(BuildContext context, {required bool locked}) {
-    final pin = widget.config.pinCode;
-    final showLock = locked && pin != null;
+    final hash = widget.config.patternHash;
+    final showLock = locked && hash != null;
 
     // 用 Stack 盖住而不是直接 return LockScreen 换掉：child 是整棵
     // Navigator 子树（WebView、路由栈都挂在里面），换掉就等于卸载重建，
@@ -107,7 +107,7 @@ class _PinGateState extends State<PinGate> with WidgetsBindingObserver {
         if (showLock)
           Positioned.fill(
             child: LockScreen(
-              pinCode: pin,
+              patternHash: hash,
               appName: widget.config.buildTime.name,
               onUnlocked: () {
                 _pausedAt = null;

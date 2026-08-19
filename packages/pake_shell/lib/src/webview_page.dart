@@ -69,7 +69,7 @@ class WebViewPage extends StatefulWidget {
   final RuntimeConfig config;
   final VoidCallback onOpenSettings;
 
-  /// 应用锁当前是不是锁着的，由 `PinGate` 写、这里只读。
+  /// 应用锁当前是不是锁着的，由 `LockGate` 写、这里只读。
   ///
   /// 这个耦合是真实存在的语义依赖——「锁着的时候不响应导航」——而不是顺手
   /// 传下来的。`LockScreen` 自己那个 `PopScope(canPop: false)` 挂在
