@@ -1,19 +1,33 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'debug_drawer.dart';
 import 'lock/lock_gate.dart';
 import 'runtime_config.dart';
+import 'update/pending_update.dart';
+import 'update/update_check.dart';
+import 'update/update_dialog.dart';
+import 'update/update_service.dart';
 import 'webview_page.dart';
 
 class PakeApp extends StatefulWidget {
-  const PakeApp({super.key, required this.config, this.logsDir});
+  const PakeApp({
+    super.key,
+    required this.config,
+    this.logsDir,
+    this.updateService,
+  });
 
   final RuntimeConfig config;
 
   /// `logger_utils` 的日志落盘目录，由 `main.dart` 用 `path_provider` 算出
   /// 来往下传，最终交给 `DebugDrawer` 里的 `LogPage`。
   final String? logsDir;
+
+  /// 只为测试注入，生产路径上现造。
+  final UpdateService? updateService;
 
   @override
   State<PakeApp> createState() => _PakeAppState();
@@ -28,9 +42,43 @@ class _PakeAppState extends State<PakeApp> {
   final _locked = ValueNotifier<bool>(false);
 
   @override
+  void initState() {
+    super.initState();
+    _pending = PendingUpdate(locked: _locked, onReady: _showUpdate);
+    _checkForUpdate();
+  }
+
+  @override
   void dispose() {
+    _pending.dispose();
     _locked.dispose();
     super.dispose();
+  }
+
+  late final PendingUpdate _pending;
+
+  /// iOS 上不自动查：侧载的 IPA 点了链接也装不上（要 AltStore、重签名或
+  /// Xcode 重装），弹一个「有新版」只是在告诉用户一件他无能为力的事。
+  /// 设置页里的手动检查两端都留着。
+  Future<void> _checkForUpdate() async {
+    if (Platform.isIOS) return;
+
+    final info = await (widget.updateService ?? UpdateService(widget.config))
+        .checkOnLaunch();
+    if (info == null || !mounted) return;
+
+    _pending.offer(info);
+  }
+
+  void _showUpdate(UpdateInfo info) {
+    final context = _navigatorKey.currentContext;
+    if (context == null) return;
+
+    showUpdateDialog(
+      context,
+      info,
+      onDismiss: (version) => widget.config.dismissedUpdateVersion = version,
+    );
   }
 
   void _openSettings() {

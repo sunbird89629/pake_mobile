@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:debug_sheet/debug_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:pake_config/pake_config.dart';
@@ -7,6 +9,9 @@ import 'log_page.dart';
 import 'net/net_log.dart';
 import 'net/net_log_page.dart';
 import 'runtime_config.dart';
+import 'update/update_check.dart';
+import 'update/update_dialog.dart';
+import 'update/update_service.dart';
 
 const _customLabel = 'Custom…';
 
@@ -32,6 +37,7 @@ class DebugDrawer extends StatefulWidget {
     required this.onClearCache,
     required this.netLog,
     this.logsDir,
+    this.updateService,
   });
 
   final RuntimeConfig config;
@@ -45,6 +51,10 @@ class DebugDrawer extends StatefulWidget {
   /// `logger_utils` 的日志落盘目录，由 `main.dart` 用 `path_provider` 算出来
   /// 再一路传下来。测试里不传——用不到「View logs」的场景不需要它。
   final String? logsDir;
+
+  /// 只为测试注入。生产路径上现造一个——它没有状态，`UpdateService` 的
+  /// 全部状态都在 `RuntimeConfig` 里。
+  final UpdateService? updateService;
 
   @override
   State<DebugDrawer> createState() => _DebugDrawerState();
@@ -132,6 +142,41 @@ class _DebugDrawerState extends State<DebugDrawer> {
     setState(() {});
   }
 
+  bool _checking = false;
+
+  /// 手动检查：无视开关与节流，并且**回显结果**——包括「已是最新版」和错误。
+  /// 自动路径必须静默（墙内查不到是常态），但用户主动点了按钮却什么都不显示
+  /// 是另一回事。
+  Future<void> _checkForUpdates() async {
+    setState(() => _checking = true);
+    final messenger = ScaffoldMessenger.of(context);
+
+    String message;
+    UpdateInfo? info;
+    try {
+      info = await (widget.updateService ?? UpdateService(_config)).check();
+      message = info == null
+          ? 'Already on the latest version (${_config.buildTime.version})'
+          : 'Version ${info.version} is available';
+    } catch (e) {
+      message = 'Check failed: $e';
+    }
+
+    if (!mounted) return;
+    setState(() => _checking = false);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: info == null
+            ? null
+            : SnackBarAction(
+                label: 'Download',
+                onPressed: () => openDownload(info!.downloadUrl),
+              ),
+      ),
+    );
+  }
+
   void _reset() {
     _config.reset();
     setState(() {});
@@ -214,6 +259,39 @@ class _DebugDrawerState extends State<DebugDrawer> {
               title: const Text('Change pattern'),
               leading: const Icon(Icons.pattern),
               onTap: _changePattern,
+            ),
+          const Divider(),
+          ListTile(
+            title: const Text('Version'),
+            subtitle: Text(_config.buildTime.version),
+            leading: const Icon(Icons.info_outline),
+          ),
+          ListTile(
+            key: const ValueKey('checkForUpdates'),
+            title: const Text('Check for updates'),
+            leading: const Icon(Icons.system_update),
+            trailing: _checking
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : null,
+            onTap: _checking ? null : _checkForUpdates,
+          ),
+          // iOS 上不显示：侧载的 IPA 装不上，自动提示只是在报告一件用户
+          // 无能为力的事。手动那一行两端都留着。
+          if (!Platform.isIOS)
+            SwitchListTile(
+              key: const ValueKey('updateCheckEnabled'),
+              title: const Text('Check on launch'),
+              subtitle: const Text(
+                'Asks GitHub for a newer build at most once a day.',
+              ),
+              value: _config.updateCheckEnabled,
+              onChanged: (on) {
+                _config.updateCheckEnabled = on;
+                setState(() {});
+              },
             ),
           const Divider(),
           ListTile(

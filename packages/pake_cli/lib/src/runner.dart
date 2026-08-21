@@ -4,6 +4,7 @@ import 'commands/build.dart';
 import 'commands/doctor.dart';
 import 'commands/icon.dart';
 import 'commands/init.dart';
+import 'commands/release.dart';
 import 'output.dart';
 
 CommandRunner<int> buildRunner(Output output) {
@@ -16,7 +17,8 @@ CommandRunner<int> buildRunner(Output output) {
     ..addCommand(InitCommand(output))
     ..addCommand(BuildCommand(output))
     ..addCommand(DoctorCommand(output))
-    ..addCommand(IconCommand(output));
+    ..addCommand(IconCommand(output))
+    ..addCommand(ReleaseCommand(output));
 }
 
 /// 跑一次 CLI，返回退出码。

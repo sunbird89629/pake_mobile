@@ -46,6 +46,7 @@ dependencies:
   logger_utils:
     git:
       url: https://github.com/sunbird89629/logger_utils.git
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:

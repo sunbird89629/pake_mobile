@@ -28,6 +28,13 @@ class DoctorCommand extends Command<int> {
         ? flutter.stdout.toString().split('\n').first
         : 'NOT FOUND';
 
+    // `pakem release` 全靠它跟 GitHub 说话，鉴权也在它手里。缺了不影响构建，
+    // 所以不参与退出码判定。
+    final gh = await _runner.run('gh', ['--version']);
+    checks['gh'] = gh.exitCode == 0
+        ? gh.stdout.toString().split('\n').first
+        : 'NOT FOUND (needed by `pakem release`)';
+
     if (Platform.isMacOS) {
       final identities = parseIdentities(
         (await _runner.run('security', [

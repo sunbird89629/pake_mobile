@@ -41,5 +41,12 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Android 11+ 的包可见性：没有这一条，url_launcher 找不到任何能开
+             https 的 app，「更新」按钮在真机上点了没反应——而单元测试永远
+             看不到这个失败。更新提示靠它跳系统浏览器下载 APK。 -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
     </queries>
 </manifest>

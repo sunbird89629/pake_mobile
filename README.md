@@ -11,6 +11,7 @@ pakem init                                    # 生成 pake.json 模板
 pakem build https://m.weibo.cn --name Weibo --bundle-id com.pake.weibo
 pakem build https://m.weibo.cn --platform android,ios --team-id ABCDE12345 --profile "Pake Dev"
 pakem icon https://m.weibo.cn/favicon.ico
+pakem release                                 # 把归档产物发成 GitHub Release
 pakem doctor
 ```
 
@@ -24,7 +25,7 @@ workspace 是跨 app 复用的单一 Flutter 项目，`~/.pake/workspace/build/`
 
 | | 构建期 `pake.json` | 运行期（设置页） |
 |---|---|---|
-| 内容 | app 名、bundle id、图标、版本号、初始 URL、系统权限 | 当前 URL、UA、注入脚本开关、缓存策略 |
+| 内容 | app 名、bundle id、图标、版本号、初始 URL、系统权限 | 当前 URL、UA、注入脚本开关、缓存策略、更新检查 |
 | 谁写 | CLI | 设置页 |
 
 改 UA 不需要重新构建。运行期层为空时回落构建期默认；「重置」= 清空运行期层。
@@ -36,6 +37,43 @@ workspace 是跨 app 复用的单一 Flutter 项目，`~/.pake/workspace/build/`
 
 **这条栏没有关闭开关**，这是刻意设计：它和错误页上的按钮是仅剩的两个设置
 入口，允许关掉就等于允许用户把自己锁在外面，一个错误的 URL 会让 app 变砖。
+
+## 检查更新
+
+打好的 app 冷启动时会去主仓的 GitHub Releases 查有没有新版，一天最多一次；
+有就弹一次提示，点「更新」跳系统浏览器下 APK。设置页里能手动查、能关掉自动
+检查。**iOS 不自动查**——侧载的 IPA 点了链接也装不上。
+
+发布一个能被检测到的版本：
+
+```bash
+# 1. 改 pake.json 的 version，2. 构建，3. 装到真机上验过，4. 再发
+pakem build https://www.4kvm.site
+pakem release --notes "修了 X"
+```
+
+tag 由 CLI 拼成 `<bundleId 末段>-v<version>`（`com.pake.fourkvm` + `1.2.0`
+→ `fourkvm-v1.2.0`），app 端按同样的规则筛——**手动建 release 时 tag 写错
+就是静默失效**，这正是 `pakem release` 存在的理由。它需要 `gh` 并且已登录，
+`pakem doctor` 会报它在不在。
+
+`pakem release` **不构建**：它只发 `~/.pake/out/<app>/` 里已经躺着的那份，
+逼你先把包装到真机上验过。想灰度就在 GitHub 上把 release 勾成 pre-release
+——app 端跳过 prerelease，验完再取消勾选。
+
+三条已知边界，都是刻意接受的：
+
+- **debug key 签的包不拦。** 发出去了用户覆盖安装只会看到「应用未安装」，
+  排查成本很高。发布前确认 `pakem build` 输出里的 `androidSigning`
+- **只拉一页 100 条 release。** 所有 app 共用主仓，某个 app 的最新版被挤出
+  这 100 条就再也检测不到
+- **墙内基本查不到。** `api.github.com` 不可达时一律静默——不弹错、不重试
+- **只给 arm64 设备推包。** 构建是 `--split-per-abi` 的三个 APK，app 端认
+  `arm64-v8a`；只剩 32 位的老设备拿到的包装不上
+
+CI 里 `build-presets.yml` 发的那种 `presets-<时间戳>` release 一个 app 都
+检测不到（tag 前缀对不上，这是设计使然）。它是持续构建，`pakem release`
+才是面向用户的发布通道。
 
 ## 应用锁
 

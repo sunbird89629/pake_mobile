@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import 'package:pake_shell/src/debug_drawer.dart';
 import 'package:pake_shell/src/lock/pattern_code.dart';
 import 'package:pake_shell/src/net/net_log.dart';
 import 'package:pake_shell/src/runtime_config.dart';
+import 'package:pake_shell/src/update/update_service.dart';
 
 import 'support/draw_pattern.dart';
 
@@ -45,16 +47,28 @@ void main() {
     reloadCount = 0;
   });
 
-  Future<void> pump(WidgetTester tester) => tester.pumpWidget(
-    MaterialApp(
-      home: DebugDrawer(
-        config: config,
-        onReloadRequested: () => reloadCount++,
-        onClearCache: () async {},
-        netLog: NetLog(),
-      ),
-    ),
-  );
+  Future<void> pump(WidgetTester tester, {UpdateService? updateService}) =>
+      tester.pumpWidget(
+        MaterialApp(
+          home: DebugDrawer(
+            config: config,
+            onReloadRequested: () => reloadCount++,
+            onClearCache: () async {},
+            netLog: NetLog(),
+            updateService: updateService,
+          ),
+        ),
+      );
+
+  /// 点到「Check for updates」那一行——它在列表底部，得先滚过去。
+  Future<void> tapCheckForUpdates(WidgetTester tester) async {
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('checkForUpdates')),
+      200,
+    );
+    await tester.tap(find.byKey(const ValueKey('checkForUpdates')));
+    await tester.pumpAndSettle();
+  }
 
   group('uaPresetOrder', () {
     test('puts the current UA first so the sheet preselects it', () {
@@ -263,6 +277,68 @@ void main() {
 
       expect(config.appLockEnabled, isTrue);
       expect(config.patternHash, hashPattern(_second));
+    });
+  });
+
+  group('updates', () {
+    UpdateService service(Fetcher fetch) => UpdateService(config, fetch: fetch);
+
+    testWidgets('shows the installed version', (tester) async {
+      await pump(tester);
+      // 列表是懒构建的，那一行在屏幕外，得先滚过去才存在。
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('checkForUpdates')),
+        200,
+      );
+
+      expect(find.text(_buildTime.version), findsOneWidget);
+    });
+
+    // 手动路径必须有确定答复——自动路径的静默在这里是缺陷不是特性。
+    testWidgets('says so when there is nothing newer', (tester) async {
+      await pump(tester, updateService: service((_) async => '[]'));
+      await tapCheckForUpdates(tester);
+
+      expect(find.textContaining('Already on the latest'), findsOneWidget);
+    });
+
+    testWidgets('surfaces a newer version with a download action', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        updateService: service(
+          (_) async => jsonEncode([
+            {
+              'tag_name': 'weibo-v2.0.0',
+              'draft': false,
+              'prerelease': false,
+              'assets': [
+                {
+                  'name': 'app.apk',
+                  'browser_download_url': 'https://dl/app.apk',
+                },
+              ],
+            },
+          ]),
+        ),
+      );
+      await tapCheckForUpdates(tester);
+
+      expect(find.text('Version 2.0.0 is available'), findsOneWidget);
+      expect(find.text('Download'), findsOneWidget);
+    });
+
+    testWidgets('reports the failure instead of swallowing it', (tester) async {
+      await pump(
+        tester,
+        updateService: service(
+          (_) async => throw const SocketException('nope'),
+        ),
+      );
+      await tapCheckForUpdates(tester);
+
+      expect(find.textContaining('Check failed'), findsOneWidget);
     });
   });
 }

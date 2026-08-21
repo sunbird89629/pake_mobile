@@ -21,6 +21,16 @@ abstract final class RuntimeKeys {
   /// `pake_shell/lib/src/lock/pattern_code.dart`。
   static const appLockEnabled = 'pake.appLockEnabled';
   static const patternHash = 'pake.patternHash';
+
+  /// 启动时自动检查更新的开关。
+  static const updateCheckEnabled = 'pake.updateCheckEnabled';
+
+  /// 上次**成功**发出检查请求的毫秒时间戳，24 小时节流用。
+  static const lastUpdateCheckAt = 'pake.lastUpdateCheckAt';
+
+  /// 用户点过「稍后」的那个版本号。存版本号而不是布尔——「稍后」只对这一个
+  /// 版本生效，下一版照弹，否则一次误点就永久关掉了提示。
+  static const dismissedUpdateVersion = 'pake.dismissedUpdateVersion';
 }
 
 /// 设置页「切 UA」的预设。`Default` 映射到空串，表示用系统默认 UA。

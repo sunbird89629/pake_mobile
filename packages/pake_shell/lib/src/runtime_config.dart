@@ -59,6 +59,29 @@ class RuntimeConfig {
       ? _box.remove(RuntimeKeys.patternHash)
       : _box.write(RuntimeKeys.patternHash, value);
 
+  /// 默认开——装完就永远停在那个版本是这个壳最实际的问题。关掉它是用户
+  /// 唯一的止损手段：仓库是硬编码的，别人 fork 后打的包也会来查这个仓。
+  bool get updateCheckEnabled =>
+      _readBool(RuntimeKeys.updateCheckEnabled) ?? true;
+  set updateCheckEnabled(bool value) =>
+      _box.write(RuntimeKeys.updateCheckEnabled, value);
+
+  DateTime? get lastUpdateCheckAt {
+    final value = _box.read<Object?>(RuntimeKeys.lastUpdateCheckAt);
+    return value is int ? DateTime.fromMillisecondsSinceEpoch(value) : null;
+  }
+
+  set lastUpdateCheckAt(DateTime? value) => value == null
+      ? _box.remove(RuntimeKeys.lastUpdateCheckAt)
+      : _box.write(RuntimeKeys.lastUpdateCheckAt, value.millisecondsSinceEpoch);
+
+  String? get dismissedUpdateVersion =>
+      _readString(RuntimeKeys.dismissedUpdateVersion);
+
+  set dismissedUpdateVersion(String? value) => value == null
+      ? _box.remove(RuntimeKeys.dismissedUpdateVersion)
+      : _box.write(RuntimeKeys.dismissedUpdateVersion, value);
+
   /// 默认全开——构建时特意打包进来的脚本，默认不生效才是意外。
   ///
   /// 集合里放的是 **id**（`scriptIdFor`），不是 `pake.json` 里的原始路径：
@@ -89,6 +112,9 @@ class RuntimeConfig {
       RuntimeKeys.captureNetwork,
       RuntimeKeys.appLockEnabled,
       RuntimeKeys.patternHash,
+      RuntimeKeys.updateCheckEnabled,
+      RuntimeKeys.lastUpdateCheckAt,
+      RuntimeKeys.dismissedUpdateVersion,
     ]) {
       _box.remove(key);
     }
