@@ -1,5 +1,6 @@
 {
   "name": "DADATU",
   "url": "https://www.dadatu.net/",
-  "bundleId": "com.pake.dadatu"
+  "bundleId": "com.pake.dadatu",
+  "version": "1.0.0"
 }

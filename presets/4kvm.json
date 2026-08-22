@@ -1,5 +1,6 @@
 {
   "name": "4KVM",
-  "url": "https://www.4kvm.net/",
-  "bundleId": "com.pake.fourkvm"
+  "url": "https://www.4kvm.site/",
+  "bundleId": "com.pake.fourkvm",
+  "version": "1.0.0"
 }

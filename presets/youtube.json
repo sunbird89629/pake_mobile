@@ -1,5 +1,6 @@
 {
   "name": "YouTube",
   "url": "https://www.youtube.com/",
-  "bundleId": "com.pake.youtube"
+  "bundleId": "com.pake.youtube",
+  "version": "1.0.0"
 }
