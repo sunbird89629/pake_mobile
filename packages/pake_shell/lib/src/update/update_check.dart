@@ -77,6 +77,7 @@ List<int>? parseTag(String tag, String prefix) {
 /// 只意味着「这次没查到」，不该冒泡。
 UpdateInfo? pickUpdate({
   required String body,
+  required String appName,
   required String bundleId,
   required String currentVersion,
 }) {
@@ -117,7 +118,7 @@ UpdateInfo? pickUpdate({
       continue;
     }
 
-    final url = _downloadUrl(entry);
+    final url = _downloadUrl(entry, appName);
     // 连 html_url 都没有的 release 点了也没地方去，当它不存在。
     if (url.isEmpty) continue;
 
@@ -140,12 +141,19 @@ UpdateInfo? pickUpdate({
 /// 随机发一个出去，而 x86_64 装到任何一台真手机上都是失败的。所以先认
 /// `arm64-v8a`：现役 Android 手机几乎全是它。
 ///
-/// 认不出 ABI 的（单个通用包）就取第一个 apk，一个 apk 都没有回落 release
-/// 页面——至少手动能拿到包。
+/// 认不出 ABI 的（单个通用包）就退回全部 apk。
+///
+/// 剩下不止一个时再按 [appName] 筛一道：CI 的 `build-presets` 会把多个 app
+/// 的包挂进同一条 release，asset 名带 app 名前缀
+/// （`4KVM-app-arm64-v8a-release.apk`），只按 ABI 筛的话 DADATU 的用户会拿到
+/// 4KVM 的包——applicationId 不同，那不是升级，是**静默装上另一个 app**。
+///
+/// 筛完还是拿不准（一个都不剩、或者剩好几个）就回落 release 页面让人自己挑。
+/// 发错包比让人多点一下贵得多。
 ///
 /// 残余代价：只剩 32 位的老设备会拿到一个装不上的 arm64 包。不为它引
 /// `device_info_plus` 去读真实 ABI，那是给一类基本不存在的设备加一个依赖。
-String _downloadUrl(Map<String, Object?> release) {
+String _downloadUrl(Map<String, Object?> release, String appName) {
   final apks = <String, String>{};
 
   final assets = release['assets'];
@@ -160,10 +168,18 @@ String _downloadUrl(Map<String, Object?> release) {
     }
   }
 
-  for (final entry in apks.entries) {
-    if (entry.key.contains('arm64-v8a')) return entry.value;
+  var candidates = apks.keys.where((n) => n.contains('arm64-v8a')).toList();
+  if (candidates.isEmpty) candidates = apks.keys.toList();
+
+  if (candidates.length > 1 && appName.isNotEmpty) {
+    final needle = appName.toLowerCase();
+    final mine = candidates
+        .where((n) => n.toLowerCase().contains(needle))
+        .toList();
+    if (mine.isNotEmpty) candidates = mine;
   }
-  if (apks.isNotEmpty) return apks.values.first;
+
+  if (candidates.length == 1) return apks[candidates.single]!;
 
   final html = release['html_url'];
   return html is String ? html : '';

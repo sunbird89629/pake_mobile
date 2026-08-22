@@ -61,7 +61,7 @@ List<String> flutterBuildArgs(
   final common = [
     '--release',
     '--build-name=${config.version}',
-    '--build-number=${config.buildNumber}',
+    '--build-number=${config.versionCode}',
   ];
 
   return switch (platform) {

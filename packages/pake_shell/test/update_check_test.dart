@@ -23,12 +23,16 @@ Map<String, Object?> release(
   ],
 };
 
-UpdateInfo? pick(List<Object?> releases, {String current = '1.0.0'}) =>
-    pickUpdate(
-      body: jsonEncode(releases),
-      bundleId: 'com.pake.fourkvm',
-      currentVersion: current,
-    );
+UpdateInfo? pick(
+  List<Object?> releases, {
+  String current = '1.0.0',
+  String appName = '4KVM',
+}) => pickUpdate(
+  body: jsonEncode(releases),
+  appName: appName,
+  bundleId: 'com.pake.fourkvm',
+  currentVersion: current,
+);
 
 void main() {
   group('tagPrefixFor', () {
@@ -119,6 +123,47 @@ void main() {
       expect(info!.downloadUrl, 'https://dl/app-arm64-v8a-release.apk');
     });
 
+    // CI 的 build-presets 把多个 app 的包挂进同一条 release，asset 名带 app
+    // 名前缀。只按 ABI 筛的话，DADATU 的用户会拿到 4KVM 的包——applicationId
+    // 不同，那不是升级，是静默装上另一个 app。
+    test('picks its own app out of a release carrying several', () {
+      final assets = [
+        for (final app in ['4KVM', 'DADATU', 'YouTube'])
+          for (final abi in ['arm64-v8a', 'armeabi-v7a', 'x86_64'])
+            '$app-app-$abi-release.apk',
+      ];
+
+      expect(
+        pick([release('fourkvm-v1.2.0', assets: assets)])!.downloadUrl,
+        'https://dl/4KVM-app-arm64-v8a-release.apk',
+      );
+      expect(
+        pick([
+          release('fourkvm-v1.2.0', assets: assets),
+        ], appName: 'DADATU')!.downloadUrl,
+        'https://dl/DADATU-app-arm64-v8a-release.apk',
+      );
+    });
+
+    // 发错包比让人多点一下贵得多。
+    test(
+      'falls back to the release page when the app name cannot pick one',
+      () {
+        final info = pick([
+          release(
+            'fourkvm-v1.2.0',
+            assets: [
+              'DADATU-app-arm64-v8a-release.apk',
+              'YouTube-app-arm64-v8a-release.apk',
+            ],
+            htmlUrl: 'https://page',
+          ),
+        ], appName: '4KVM');
+
+        expect(info!.downloadUrl, 'https://page');
+      },
+    );
+
     test('falls back to any apk when nothing names an abi', () {
       final info = pick([
         release('fourkvm-v1.2.0', assets: ['app.ipa', 'app.apk', 'notes.txt']),
@@ -155,6 +200,7 @@ void main() {
         expect(
           pickUpdate(
             body: body,
+            appName: '4KVM',
             bundleId: 'com.pake.fourkvm',
             currentVersion: '1.0.0',
           ),

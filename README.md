@@ -52,6 +52,11 @@ pakem build https://www.4kvm.site
 pakem release --notes "修了 X"
 ```
 
+`version` 是唯一要改的字段：Android 的 `versionCode` 从它推导
+（`1.2.3` → `10203`），不用再单独维护 `buildNumber`——系统只认 versionCode，
+它不跟着走的话 bump 完版本号两个包在系统眼里一模一样。同一个版本要重发一次
+包时，在 pake.json 里显式写 `buildNumber` 钉死它。
+
 tag 由 CLI 拼成 `<bundleId 末段>-v<version>`（`com.pake.fourkvm` + `1.2.0`
 → `fourkvm-v1.2.0`），app 端按同样的规则筛——**手动建 release 时 tag 写错
 就是静默失效**，这正是 `pakem release` 存在的理由。它需要 `gh` 并且已登录，
@@ -59,9 +64,10 @@ tag 由 CLI 拼成 `<bundleId 末段>-v<version>`（`com.pake.fourkvm` + `1.2.0`
 
 `pakem release` **不构建**：它只发 `~/.pake/out/<app>/` 里已经躺着的那份，
 逼你先把包装到真机上验过。想灰度就在 GitHub 上把 release 勾成 pre-release
-——app 端跳过 prerelease，验完再取消勾选。
+——app 端跳过 prerelease，验完再取消勾选。取消后**最长要等一分钟才生效**：
+未登录的 `api.github.com` 响应有约 60 秒 CDN 缓存。
 
-三条已知边界，都是刻意接受的：
+四条已知边界，都是刻意接受的：
 
 - **debug key 签的包不拦。** 发出去了用户覆盖安装只会看到「应用未安装」，
   排查成本很高。发布前确认 `pakem build` 输出里的 `androidSigning`
@@ -69,7 +75,9 @@ tag 由 CLI 拼成 `<bundleId 末段>-v<version>`（`com.pake.fourkvm` + `1.2.0`
   这 100 条就再也检测不到
 - **墙内基本查不到。** `api.github.com` 不可达时一律静默——不弹错、不重试
 - **只给 arm64 设备推包。** 构建是 `--split-per-abi` 的三个 APK，app 端认
-  `arm64-v8a`；只剩 32 位的老设备拿到的包装不上
+  `arm64-v8a`；只剩 32 位的老设备拿到的包装不上。一条 release 里挂了多个 app
+  的包时（CI 的 `presets-*` 就是这样）再按 app 名筛一道，筛不出唯一一个就
+  回落到 release 页面让人自己挑
 
 CI 里 `build-presets.yml` 发的那种 `presets-<时间戳>` release 一个 app 都
 检测不到（tag 前缀对不上，这是设计使然）。它是持续构建，`pakem release`

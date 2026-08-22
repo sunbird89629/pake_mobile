@@ -28,7 +28,7 @@ String patchBuildGradle(String original, PakeConfig config) {
       )
       .replaceAll(
         RegExp(r'versionCode\s*=\s*[^\n]+'),
-        'versionCode = ${config.buildNumber}',
+        'versionCode = ${config.versionCode}',
       )
       .replaceAll(
         RegExp(r'versionName\s*=\s*[^\n]+'),

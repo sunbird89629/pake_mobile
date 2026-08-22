@@ -20,7 +20,7 @@
 | 挑选 | 取剩下 semver **最高**的，不是列表第一个 |
 | 版本比较 | 手写三段比较，不引 `pub_semver` |
 | 本地版本 | 读 `buildTime.version`（`assets/pake.json`），**不引 `package_info_plus`** |
-| asset | 优先 `arm64-v8a` 的 apk，否则任一 apk，都没有回落 `html_url` |
+| asset | 优先 `arm64-v8a` 的 apk；剩不止一个时按 app 名再筛；仍不唯一回落 `html_url` |
 | 时机 | 冷启动异步查 + 24h 节流 + 设置页手动按钮 |
 | 提示形式 | 每个新版号弹一次 dialog，「稍后」写入 `dismissedVersion` |
 | 更新动作 | `url_launcher` 跳系统浏览器（**唯一新依赖**） |
@@ -211,6 +211,17 @@ ABI 的 APK。这类 release **不会被任何 app 检测到**——tag 前缀�
 4. 硬编码主仓意味着任何人用 `pakem` 打的任何包都会去查这个仓，拿到空匹配后
    静默——多一次无意义请求。用设置页开关关掉是唯一的止损。
 
+### 2026-08-22 补：asset 按 app 名再筛一道
+
+原来只按 ABI 挑 asset。一条 release 里挂了多个 app 的包时（CI 的 `presets-*`
+正是这个形状），DADATU 的用户会拿到 `4KVM-app-arm64-v8a-release.apk`——
+applicationId 不同，那不是升级，是**静默装上另一个 app**。
+
+今天打不到，因为 `pakem release` 一次只传一个 app 的产物、而 CI 的 `presets-*`
+tag 永远匹配不上前缀；**两个条件缺一个就中招**，而这两个都不是代码保证的。
+现在多筛一道 app 名，筛完仍不唯一就回落 release 页面——发错包比让人多点一下
+贵得多。
+
 ## 测试
 
 `update_check_test.dart`（纯函数，无网络）：
@@ -220,7 +231,8 @@ ABI 的 APK。这类 release **不会被任何 app 检测到**——tag 前缀�
 - draft / prerelease 被跳过
 - 取最高版本而非列表首个（补发旧版的场景）
 - asset 挑选：ABI 三件套里取 `arm64-v8a`；无 ABI 名取任一 apk；无 apk 回落
-  `html_url`
+  `html_url`；一条 release 挂多个 app 时按 app 名筛出自己那个，筛不出唯一
+  一个也回落 `html_url`
 - 本地版本更高（开发版）时返回 null
 - JSON 结构异常时返回 null 而不是抛
 

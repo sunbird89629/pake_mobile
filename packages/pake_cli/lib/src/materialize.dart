@@ -59,15 +59,6 @@ bool _ownedByMaterialize(String relative) {
 void syncTemplate({required String templateDir, required String projectDir}) {
   final template = Directory(templateDir);
 
-  // `pake_shell/pubspec.yaml` 里 `pake_config: path: ../pake_config` 是
-  // 按源码仓库里的兄弟目录关系写的。模板被复制进 `~/.pake/workspace`
-  // 后这个相对路径不再指向任何东西——workspace 不在仓库里。固定改写成
-  // 指回仓库里 `pake_config` 的绝对路径；两者在仓库里永远是 pake_shell
-  // 的兄弟目录，这与 `_resolveTemplateDir` 定位 `pake_shell` 本身用的
-  // 是同一个假设。（Task 18 端到端 smoke test 第一次真实构建时发现：
-  // 不这么改，`flutter pub get` 在 workspace 里直接失败。）
-  final pakeConfigPath = p.normalize(p.join(templateDir, '..', 'pake_config'));
-
   for (final entity in template.listSync(recursive: true)) {
     if (entity is! File) continue;
 
@@ -81,7 +72,7 @@ void syncTemplate({required String templateDir, required String projectDir}) {
     if (relative == 'pubspec.yaml') {
       _writeIfChanged(
         target,
-        _rewritePakeConfigPath(entity.readAsStringSync(), pakeConfigPath),
+        _rewriteSiblingPaths(entity.readAsStringSync(), templateDir),
       );
       continue;
     }
@@ -103,10 +94,22 @@ void syncTemplate({required String templateDir, required String projectDir}) {
   }
 }
 
-String _rewritePakeConfigPath(String pubspec, String absolutePath) {
-  return pubspec.replaceFirst(
-    RegExp(r'path:\s*\.\./pake_config'),
-    'path: $absolutePath',
+/// 把 `pubspec.yaml` 里所有 `path: ../x` 的本地依赖改写成绝对路径。
+///
+/// 这些相对路径是按源码仓库里的兄弟目录关系写的。模板被复制进
+/// `~/.pake/workspace` 后它们不再指向任何东西——workspace 不在仓库里，
+/// `flutter pub get` 会直接失败。仓库里 pake_shell 的兄弟目录关系是稳定的，
+/// 这与 `_resolveTemplateDir` 定位 `pake_shell` 本身用的是同一个假设。
+/// （Task 18 端到端 smoke test 第一次真实构建时发现。）
+///
+/// **按模式改写，不是列举包名**：原来只认死了 `../pake_config`，
+/// 后来 pake_shell 加了 `pake_cli: path: ../pake_cli` 这个 dev 依赖，
+/// 本地构建就此静默坏掉——而单元测试全绿，因为没有一条测试真的跑 pub get。
+/// 再往 pubspec 里加兄弟依赖时不该重蹈一次。
+String _rewriteSiblingPaths(String pubspec, String templateDir) {
+  return pubspec.replaceAllMapped(
+    RegExp(r'path:\s*(\.\./[^\s#]+)'),
+    (m) => 'path: ${p.normalize(p.join(templateDir, m[1]!))}',
   );
 }
 

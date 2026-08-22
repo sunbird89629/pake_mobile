@@ -52,6 +52,21 @@ void main() {
       expect(out, isNot(contains('flutter.versionCode')));
     });
 
+    // 系统认的是 versionCode 不是 versionName。它不跟着 version 走的话，
+    // bump 完版本号发出去，两个包在系统眼里一模一样。
+    test('derives versionCode from version when no buildNumber is pinned', () {
+      const config = PakeConfig(
+        name: 'Weibo',
+        url: 'https://m.weibo.cn',
+        bundleId: 'com.pake.weibo',
+        version: '2.1.0',
+      );
+
+      final out = patchBuildGradle(_fixture('build.gradle.kts.in'), config);
+
+      expect(out, contains('versionCode = 20100'));
+    });
+
     test('is idempotent — patching twice equals patching once', () {
       final once = patchBuildGradle(_fixture('build.gradle.kts.in'), _config);
       expect(patchBuildGradle(once, _config), once);

@@ -58,6 +58,7 @@ class UpdateService {
 
     return pickUpdate(
       body: body,
+      appName: config.buildTime.name,
       bundleId: config.buildTime.bundleId,
       currentVersion: config.buildTime.version,
     );

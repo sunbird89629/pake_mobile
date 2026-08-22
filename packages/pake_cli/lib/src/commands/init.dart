@@ -21,7 +21,6 @@ void writeInitTemplate(String directory) {
     'url': 'https://example.com',
     'bundleId': 'com.example.myapp',
     'version': '1.0.0',
-    'buildNumber': 1,
     'injectScripts': <String>[],
     'permissions': <String>[],
   };

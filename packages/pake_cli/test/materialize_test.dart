@@ -53,6 +53,9 @@ name: pake_shell
 dependencies:
   pake_config:
     path: ../pake_config
+dev_dependencies:
+  pake_cli:
+    path: ../pake_cli
 ''');
 
     // 模板自带的默认图标。真实的 pake_shell 是 `flutter create` 出来的，
@@ -111,18 +114,22 @@ dependencies:
       );
     });
 
-    test('rewrites pubspec.yaml\'s pake_config path dependency to an absolute '
-        'path, since the workspace is not a sibling of pake_config', () {
+    // 只认死 `../pake_config` 时，pake_shell 一加 `pake_cli` 这个 dev 依赖，
+    // 本地构建就静默坏掉——而所有单元测试照样绿，因为没有一条真的跑 pub get。
+    test('rewrites every sibling path dependency, not just pake_config, '
+        'since the workspace is not a sibling of any of them', () {
       syncTemplate(templateDir: templateDir, projectDir: ws.projectDir);
 
       final synced = File('${ws.projectDir}/pubspec.yaml').readAsStringSync();
       expect(synced, isNot(contains('../pake_config')));
-      expect(
-        synced,
-        contains(
-          'path: ${p.normalize(p.join(templateDir, '..', 'pake_config'))}',
-        ),
-      );
+      expect(synced, isNot(contains('../pake_cli')));
+      for (final pkg in ['pake_config', 'pake_cli']) {
+        expect(
+          synced,
+          contains('path: ${p.normalize(p.join(templateDir, '..', pkg))}'),
+          reason: pkg,
+        );
+      }
     });
 
     test(
