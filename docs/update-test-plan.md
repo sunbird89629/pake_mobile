@@ -198,18 +198,19 @@ test 里 `InAppWebViewPlatform.instance` 是 null，一 build 就断言失败。
 不是 bug，但**直接影响 README 里写的灰度流程**：验完 prerelease 取消勾选后，
 最长要等一分钟用户才查得到。测试时也别比缓存跑得快。
 
-## 阶段 4 · 4kvm 上的真实端到端
+## 阶段 4 · 4kvm 上的真实端到端 —— 2026-08-22 已验证，没问题
 
-前面全过之后，在真 app 上跑一遍，主要验证的是「已装用户能不能覆盖安装」。
+在真 app 上跑通了，主要验证的是「已装用户能不能覆盖安装」。
 
-- [ ] 给 `presets/4kvm.json` 补上 `"version": "1.0.0"`（现在缺，靠默认值撑着，
-      发版时容易搞不清发的是哪个版本）。顺带决定 url 要不要从被墙的
-      `www.4kvm.net` 换成 `www.4kvm.site`。
-- [ ] build + 装到真机 + 确认页面能开。
-- [ ] bump 到 `1.0.1`，build，`pakem release`，**立刻 `gh release edit --prerelease`**。
-- [ ] 手机上重置 + 冷启动 → 不弹（prerelease 生效，真实用户此刻是安全的）。
-- [ ] 手动确认那个 release 的 asset 列表和说明都对。
-- [ ] 取消 prerelease → 重置 + 冷启动 → 弹 → 下载 → 覆盖安装成功。
+验证时用的是仓库外的临时配置，验完 release 已删——所以远端现在没有任何
+`fourkvm-v*` release，`presets/4kvm.json` 也没被改动。下面两件事因此**仍未做**，
+真要发一版给用户之前必须先处理：
+
+- [ ] 给 `presets/4kvm.json` 补上 `"version": "1.0.0"`。现在缺这个字段，靠
+      `PakeConfig` 的默认值撑着——`pakem release` 的 tag 只从 json 里的 version
+      推，字段不在那里就等于「发的是哪个版本」全靠记。
+- [ ] 决定 url 要不要从被墙的 `https://www.4kvm.net/` 换成 `.site`。
+      工作用的 `pake.json` 早在 2026-08-19 就换了，预设一直没跟。
 
 ## 收尾
 
@@ -221,5 +222,5 @@ test 里 `InAppWebViewPlatform.instance` 是 null，一 build 就断言失败。
       adb uninstall com.pake.updatetest
       ```
 
-- [ ] 4kvm 那个测试版本要么留着当正式 1.0.1，要么同样删掉。
-      **一旦取消过 prerelease 就可能已经有人下过了**，删 release 不会把它撤回来。
+- [x] 4kvm 那个测试版本已删。注意：**一旦取消过 prerelease 就可能已经有人
+      下过了**，删 release 不会把它撤回来。
