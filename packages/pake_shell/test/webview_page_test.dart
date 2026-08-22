@@ -68,7 +68,11 @@ void main() {
     test('reversing direction re-anchors so the next flip is 10px away', () {
       // 下滑藏起来之后立刻回头：锚点已经跟到 111，再上滑 10px 就该出来。
       final hidden = step(y: 111, anchor: 100, visible: true);
-      final shown = step(y: 101, anchor: hidden.anchor, visible: hidden.visible);
+      final shown = step(
+        y: 101,
+        anchor: hidden.anchor,
+        visible: hidden.visible,
+      );
 
       expect(shown.visible, isTrue);
     });

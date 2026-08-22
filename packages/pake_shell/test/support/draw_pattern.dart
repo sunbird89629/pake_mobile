@@ -22,10 +22,7 @@ Future<void> drawPattern(WidgetTester tester, List<int> cells) async {
     final cellW = rect.width / 3;
     final cellH = rect.height / 3;
     return rect.topLeft +
-        Offset(
-          (cell % 3 + 0.5) * cellW,
-          (cell ~/ 3 + 0.5) * cellH,
-        );
+        Offset((cell % 3 + 0.5) * cellW, (cell ~/ 3 + 0.5) * cellH);
   }
 
   final gesture = await tester.startGesture(centerOf(cells.first));

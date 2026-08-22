@@ -62,7 +62,10 @@ void main() {
       // 隐藏时整条栏被 IgnorePointer 关掉：它滑出屏幕后盖住的是网页的可点
       // 区域，不能再吃事件。warnIfMissed 关掉是因为命中必然落空——那正是
       // 这里要断言的。
-      await tester.tap(find.byIcon(Icons.settings_outlined), warnIfMissed: false);
+      await tester.tap(
+        find.byIcon(Icons.settings_outlined),
+        warnIfMissed: false,
+      );
 
       expect(taps, isEmpty);
     });
