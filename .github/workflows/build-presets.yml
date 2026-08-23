@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       - id: read
         run: |
-          PRESETS=$(jq -c -n '[inputs | {name, url, bundleId}]' presets/*.json)
+          PRESETS=$(jq -c -n '[inputs | {name, url, bundleId, version}]' presets/*.json)
           NAMES=$(jq -r '.[].name' <<< "$PRESETS" | paste -sd, -)
           echo "presets=$PRESETS" >> "$GITHUB_OUTPUT"
           echo "names=$NAMES" >> "$GITHUB_OUTPUT"
@@ -72,9 +72,13 @@ jobs:
         working-directory: packages/pake_cli
         run: |
           set -o pipefail
+          # 预设漏写 version 时展开成空，不传 --version 回落 CLI 的默认值——
+          # 传 --version "" 会被 validateConfig 判成非法版本号，构建直接失败。
+          VERSION="${{ matrix.preset.version }}"
           dart run bin/pakem.dart build "${{ matrix.preset.url }}" \
             --name "${{ matrix.preset.name }}" \
             --bundle-id "${{ matrix.preset.bundleId }}" \
+            ${VERSION:+--version "$VERSION"} \
             --platform android \
             --json | tee "$GITHUB_WORKSPACE/build.json"
           echo

@@ -10,7 +10,7 @@ dart pub global activate --source path packages/pake_cli
 pakem init                                    # 生成 pake.json 模板
 pakem build https://m.weibo.cn --name Weibo --bundle-id com.pake.weibo
 pakem build https://m.weibo.cn --platform android,ios --team-id ABCDE12345 --profile "Pake Dev"
-pakem icon https://m.weibo.cn/favicon.ico
+pakem icon https://m.weibo.cn/favicon.ico     # build 不给 --icon 时也会自动找
 pakem release                                 # 把归档产物发成 GitHub Release
 pakem doctor
 ```
@@ -33,10 +33,13 @@ workspace 是跨 app 复用的单一 Flutter 项目，`~/.pake/workspace/build/`
 ## 设置页入口
 
 底部悬浮工具栏上的 ⚙。它浮在网页之上，上滑隐藏、下滑显示，滑到页面顶部或
-换页时必然出现。同一条栏上还有后退和刷新。
+换页时必然出现（网页播放器进全屏时也让位）。同一条栏上还有后退和刷新。
 
 **这条栏没有关闭开关**，这是刻意设计：它和错误页上的按钮是仅剩的两个设置
 入口，允许关掉就等于允许用户把自己锁在外面，一个错误的 URL 会让 app 变砖。
+
+系统返回键被接管成网页后退，退无可退时才退出 app——壳里只有一个页面，返回
+键的默认行为（直接杀掉 app）在网页场景里几乎总是误操作。
 
 ## 检查更新
 
@@ -83,12 +86,29 @@ CI 里 `build-presets.yml` 发的那种 `presets-<时间戳>` release 一个 app
 检测不到（tag 前缀对不上，这是设计使然）。它是持续构建，`pakem release`
 才是面向用户的发布通道。
 
+## 预设站点
+
+`presets/` 下一个 json 一个 app，手动触发 `build-presets.yml` 会把它们并成
+矩阵一次性全构建，产物挂进同一条 `presets-<时间戳>` release。加一个站点 =
+加一个 json 文件。
+
+json 里的 `version` 会传给构建，漏写就回落 CLI 的默认值 `1.0.0`。它定的是
+versionCode——不 bump 的话新出的包在系统眼里和上一个一模一样，装到同一台
+手机上分不出新旧。（这批包不参与更新检查，见上一节。）
+
+域名被墙时的处置是**换域名，不是加代理**：GFW 按域名封锁，同一站点的备用
+域名往往直连可达——`4kvm.site`、`dadatuys.com` 都是这么换过来的。
+
 ## 应用锁
 
-设置页里可以开一道四位 PIN 锁：冷启动时锁，切后台超过 30 秒回来也锁。
-PIN 明文存在运行期配置里，防的是别人拿起你的手机，不是取证分析。
+设置页里可以开一道手势图案锁（3×3 九宫格，至少连 4 个点）：冷启动时锁，
+切后台超过 30 秒回来也锁。图案有方向，`1-2-3` 和 `3-2-1` 不是同一个。
 
-**忘了 PIN 没有恢复路径**——锁屏盖住了底部工具栏，只能清应用数据或重装。
+存的是图案的 SHA-256，**不加盐**：威胁模型是「别人拿起我的手机」，不是取证
+分析——拿到设备的人本来就能本地枚举全部合法图案（不到 40 万种，秒级）。
+哈希换来的只是「翻一眼存储文件不会直接看到密码」这一件事。
+
+**忘了图案没有恢复路径**——锁屏盖住了底部工具栏，只能清应用数据或重装。
 这是刻意的：留后门的锁不叫锁。锁着的时候系统返回键也不响应。
 
 ## 退出码
