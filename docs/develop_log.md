@@ -57,3 +57,65 @@ pake_mobile 项目的开发日志，开发过程中的信息及时保存到这�
   - `event.js` — 快捷键/导航、剪贴板、链接拦截（`_blank`→`_self`、外链开系统浏览器、下载扩展名白名单）、右键菜单、通知/徽标桥
   - `toast.js` — `window.pakeToast` 轻量 toast，供 Rust 侧调下载状态等
 - **预设应用**（16 个）：wechat / deepseek / grok / gemini / excalidraw / notion / programmusic / twitter / youtube / chatgpt / flomo / qwerty / lizhi / xiaohongshu / youtubemusic / weread；其中 wechat 带 `incognito: true` + 自定义窗口尺寸
+
+---
+
+# 版本号策略落地
+
+> 2026-08-25
+> 产出：[`versioning.md`](./versioning.md)（对应 roadmap 的「规划版号相关的逻辑」，已从 roadmap 删除）
+
+四处版本号之前都是随手定的。定下的判据是「semver 描述这个交付物对它的**消费者**
+而言变了什么」，由此四处归属一次分清：**只有各 app 的 `version` 是真号**——它被 `pickUpdate()`
+读来决定要不要给用户弹更新提示。`pake_cli` 眼下也是占位：只能
+`dart pub global activate --source path` 从本地装，没有分发渠道，没人能选装
+哪一版，编号是空仪式，有了渠道再启用。`pake_shell` 构建时被覆盖、
+`pake_config` 是 `publish_to: none` 的内部库——同样不维护。**壳不单独编号**：
+它是模板不是发布物，想知道某版 app 跑的哪个壳，去看那个 tag 的 commit。
+
+## 摸出来的两件事
+
+**一、`versionCodeFor()` 的输出不是装机的最终值。** 实测三个线上 APK：
+
+| ABI | 偏移 | `1.0.0` 实际 versionCode |
+|---|---|---|
+| armeabi-v7a | +1000 | 11000 |
+| arm64-v8a | +2000 | 12000 |
+| x86_64 | +4000 | 14000 |
+
+`--split-per-abi` 让 Flutter 又加了一层 ABI 偏移，而 `config.dart` 的注释和
+README 都只说了推导那一步（`1.2.3` → `10203`）。下次有人对着 `aapt dump` 的
+数字会以为推导逻辑坏了——两处注释都补上了。
+
+**二、「CI 发的包检测不到更新」不是 bug。** 一开始把它当致命洞，
+README 第 108 行早写明是设计使然：`build-presets` 是持续构建通道，
+`pakem release` 才是面向用户的发布通道。真实情况是后者从来没走过
+（`gh release list` 里没有任何 `<prefix>-v<semver>`），属于「还没发过正式版」。
+CI 的 tag 约定不用动。
+
+## 起点重置
+
+三个 preset `1.0.0` → `0.1.0`。更新链路一次都没真正走通过，`0.x` 更诚实。
+
+安全性验证过：线上实际装机的只有 `presets-20260801-153907` 那批，arm64
+versionCode 是 **2001**（当时 `buildNumber` 还默认写死 1，2000+1），而 `0.1.0`
+推出来是 2100，高于它，能直接覆盖安装。8/23 那几次 CI 构建（12000）没分发给
+任何人——这点先跟本人确认过再动的手，否则重置就是让已装用户装不上新包。
+
+## 参照 tw93/Pake：它共用一个号，而那是对的
+
+桌面版兄弟项目走的完全相反：**全仓库一个号** `3.15.7`，同步写在
+`package.json`（npm 的 `pake-cli`）、`Cargo.toml`、`tauri.conf.json` 三处；
+16 个预打包 app 挂同一条 release，asset 名里连版本号都不带（`ChatGPT.dmg`）。
+
+它能这么做是因为**没有更新检测**（`Cargo.toml` 里 8 个 tauri 插件没有
+`updater`，code search 也是 0 命中）——app 版本号没有任何程序在读，只是构建
+标记。这边 `pickUpdate()` 拿它做决策，所以必须独立且准确。
+
+有意思的是两边的真号恰好调了个个儿：Pake 的 CLI 有 npm 渠道（真号）、app 号
+是空的；这边 CLI 无渠道（空号）、app 号被代码读（真号）。同一条判据
+「有没有人或程序依据这个号做决定」，在两个项目里指向相反的结论——这也是
+为什么不能照搬。
+
+双通道倒是一致：Pake 的 `continuous`（prerelease 滚动 tag）≈ 这边的
+`presets-<时间戳>`，`V3.x.x` ≈ `pakem release`。

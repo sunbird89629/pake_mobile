@@ -11,6 +11,12 @@ import 'permission.dart';
 /// （`1.0.100` 和 `1.1.0` 撞成同一个数）。三段语义化版本号里这两位到 100
 /// 本来就该进位了。
 ///
+/// **这不是装到手机上的最终值。** 构建走 `--split-per-abi`，Flutter 会再给
+/// 每个 ABI 加偏移（v7a +1000 / arm64 +2000 / x86_64 +4000），所以 `1.0.0`
+/// 的 arm64 包 `aapt` 读出来是 12000 而不是 10000——数对不上不是这里坏了。
+/// 一台设备只装同一个 ABI，同 ABI 内单调性成立；跨 ABI 的数不可比。
+/// 完整策略见 `docs/versioning.md`。
+///
 /// 解析不出来时回落 1——`validateConfig` 会先把非法 version 拦下，
 /// 走到这里的都是 `x.y.z`。
 int versionCodeFor(String version) {

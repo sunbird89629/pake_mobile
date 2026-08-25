@@ -60,6 +60,10 @@ pakem release --notes "修了 X"
 它不跟着走的话 bump 完版本号两个包在系统眼里一模一样。同一个版本要重发一次
 包时，在 pake.json 里显式写 `buildNumber` 钉死它。
 
+推导值不是装机的最终值：`--split-per-abi` 会再加一个 ABI 偏移（arm64 +2000，
+所以 `1.0.0` 的 arm64 包实际是 12000）。什么时候动哪一位、四处版本号分别归谁
+管，见 [`docs/versioning.md`](./docs/versioning.md)。
+
 tag 由 CLI 拼成 `<bundleId 末段>-v<version>`（`com.pake.fourkvm` + `1.2.0`
 → `fourkvm-v1.2.0`），app 端按同样的规则筛——**手动建 release 时 tag 写错
 就是静默失效**，这正是 `pakem release` 存在的理由。它需要 `gh` 并且已登录，

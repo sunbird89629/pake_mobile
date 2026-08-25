@@ -1,5 +1,8 @@
 name: pake_cli
 description: pakem — build any web page into an Android APK or iOS IPA.
+# 占位，暂不维护：只能 `dart pub global activate --source path` 从本地装，
+# 没有分发渠道，没人能选装哪一版——编号是空仪式。有了分发渠道再启用，
+# 规则和启用判据见 docs/versioning.md。
 version: 0.1.0
 publish_to: none
 
