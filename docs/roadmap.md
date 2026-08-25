@@ -51,6 +51,18 @@
 
 - **CLI `--json` 输出**：`pakem` 现在的输出偏人读，机器读需要结构化。
 
+- **探索 Android TV 盒子支持**
+  很多网站没有 TV 版 App，电视上只能靠投屏。Pake 打包成 TV 版 App 可直接在电视/盒子上浏览。
+  调研 Android TV 构建要求（leanback launcher、`LEANBACK_LAUNCHER` category、TV banner 图标、
+  `uses-feature android.software.leanback`）。
+
+  **核心难点是遥控器交互**：TV 无触摸屏，一切靠遥控器的 DPAD 方向键 + 中心键（OK）+ 返回键。
+  而网页是为鼠标/触控设计的，没有「焦点」概念——方向键按下去网页不知道往哪移。
+  需要：注入脚本模拟焦点导航（DPAD 在可点击元素间移动 + 高亮当前焦点，OK 触发 click、
+  方向键滚动页面），处理返回键路由（先退焦点/弹层，再退网页历史），以及遥控器文字输入
+  （屏幕键盘、避开 input 焦点陷阱）。调研 `flutter_inappwebview` 在 TV 上的 key event /
+  focus / 滚动行为能否支撑，还是需要原生 TV 层做焦点管理。
+
 ## 不做
 
 - 系统托盘、关窗隐藏、全局快捷键、多窗口/多实例、多架构 —— 桌面概念，移动端不成立。

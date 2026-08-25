@@ -13,6 +13,12 @@ on:
         description: 'Bundle id'
         required: true
         default: 'com.pake.app'
+      icon:
+        description: 'Icon path or URL (auto-discovered from the site if empty)'
+        required: false
+      version:
+        description: 'App version, x.y.z (defaults to 1.0.0)'
+        required: false
 
 jobs:
   android:
@@ -94,9 +100,16 @@ jobs:
         # tee 的退出码盖住，job 绿着结束而 build.json 里是半截输出。
         run: |
           set -o pipefail
+          # 两个可选输入展开成空时整段省掉，不能传 `--icon ""` / `--version ""`：
+          # 空 version 会被 validateConfig 判成非法版本号，空 icon 会让图标
+          # 自动发现这条路走不到。留空 = 交给 CLI 的默认行为。
+          ICON="${{ inputs.icon }}"
+          VERSION="${{ inputs.version }}"
           dart run bin/pakem.dart build "${{ inputs.url }}" \
             --name "${{ inputs.name }}" \
             --bundle-id "${{ inputs.bundle_id }}" \
+            ${ICON:+--icon "$ICON"} \
+            ${VERSION:+--version "$VERSION"} \
             --platform android \
             --json | tee "$GITHUB_WORKSPACE/build.json"
           echo
@@ -135,6 +148,9 @@ jobs:
           set -euo pipefail
           APP=$(jq -r '.app' build.json)
           SIGNING=$(jq -r '.androidSigning // "unknown"' build.json)
+          # 用户没填 version 时这里读到的是 CLI 的默认值，不是空——
+          # 版本从构建结果里读，不在 workflow 里重复一遍默认值等它腐化。
+          VERSION=$(jq -r '.version // "unknown"' build.json)
           TAG="$(echo "$APP" | tr 'A-Z ' 'a-z-')-$(date +%Y%m%d-%H%M%S)"
           WARNING=""
           if [ "$SIGNING" != release ]; then
@@ -142,11 +158,12 @@ jobs:
           fi
           gh release create "$TAG" \
             artifacts/app-*.apk \
-            --title "$APP" \
-            --notes "## $APP
+            --title "$APP $VERSION" \
+            --notes "## $APP $VERSION
 
           **URL:** ${{ inputs.url }}
           **Bundle ID:** ${{ inputs.bundle_id }}
+          **Version:** $VERSION
           **Signing:** $SIGNING
 
           $WARNING

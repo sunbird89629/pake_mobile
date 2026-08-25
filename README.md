@@ -21,6 +21,47 @@ workspace 是跨 app 复用的单一 Flutter 项目，`~/.pake/workspace/build/`
 会被下一次构建原地覆盖——`pakem build` 报出来的、也是该拿去装的，是
 `~/.pake/out/<app>/` 里的归档副本。
 
+## 在线构建（不用装任何东西）
+
+本地要跑 `pakem` 得先有 Flutter SDK + Android SDK + JDK，这不是随手就能凑齐的
+一套。想打一个包而已的话走 GitHub Actions：
+
+1. **[Fork 这个仓库](https://github.com/sunbird89629/pake_mobile/fork)**
+   ——`workflow_dispatch` 要仓库的写权限，在别人的仓库里你看不到
+   `Run workflow` 那个按钮。
+2. 去你 fork 的 **Actions** 页 → 左边选 **build** → 右上 **Run workflow**
+3. 填表：URL 和 app 名必填，bundle id 默认 `com.pake.app`（打多个 app 要各不
+   相同，否则装在一起会互相覆盖）；图标留空会自己从站点抓，版本留空是 `1.0.0`
+4. 跑完在仓库的 **Releases** 里取包——不用去 Artifacts，那个 90 天就过期了
+
+**装哪个包**：一次出三个（`--split-per-abi`），现役手机基本都装
+`app-arm64-v8a-release.apk`。
+
+有 Gradle 缓存时约 4~5 分钟（实测）；fork 后第一次跑是冷缓存，要明显更久。
+
+**这样打出来的包，app 里的「检查更新」不会有反应**，不是坏了：壳里的
+`updateRepo` 写死指向本仓，而你的 release 发在自己的 fork 里，两边对不上。
+自己构建的包靠自己重新构建来更新。
+
+### fork 出来的包不能升级，除非配一次密钥
+
+fork 里没有签名密钥，构建会回落到 Flutter 的 debug key，而**那个 key 每次
+构建都不一样**。后果不是装不上，是装得上但升不了级：第二次构建出的包想覆盖
+第一次那个，会被系统以签名不符拒绝，只能卸载重装、丢掉 app 里的所有数据。
+构建结果页（job summary）会标出本次是哪种签名。
+
+自用的话忍一次卸载重装也行。要能持续更新，就在你自己的 fork 里配一次密钥
+（[生成方式](#android-发布签名)），把它设成三个 repo secret：
+
+| secret | 值 |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | `base64 < keystore.p12 \| tr -d '\n'` |
+| `ANDROID_KEYSTORE_PASSWORD` | keystore 密码 |
+| `ANDROID_KEY_ALIAS` | key alias |
+
+配好之后每次构建都用同一张证书签，包与包之间就能正常覆盖升级了。
+**这个 keystore 丢了就没法再给同一个 app 发更新**，备份它。
+
 ## 配置分两层
 
 | | 构建期 `pake.json` | 运行期（设置页） |
@@ -151,7 +192,8 @@ chmod 600 ~/.pake/pake-release.p12 ~/.pake/signing.properties
 CI 用同一套约定，密钥来自三个 repo secret：`ANDROID_KEYSTORE_BASE64`
 （`base64 < keystore.p12 | tr -d '\n'`）、`ANDROID_KEYSTORE_PASSWORD`、
 `ANDROID_KEY_ALIAS`。没设这些 secret 时 build workflow 照常出包，但会在
-job summary 里标出 debug 签名并给一条 warning。
+job summary 里标出 debug 签名并给一条 warning。fork 出来用
+[在线构建](#在线构建不用装任何东西)的场景同理，那边写了后果。
 
 ## 开发
 

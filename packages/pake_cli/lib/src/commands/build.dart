@@ -185,6 +185,9 @@ class BuildCommand extends Command<int> {
 
     _output.success({
       'app': config.name,
+      // 版本没填时回落 CLI 默认值，机器读结果时不该还要自己猜是哪一版——
+      // 在线构建的 release notes 正是靠这个字段显示版本的。
+      'version': config.version,
       'artifacts': archived,
       'archivedInto': _workspace.outDirFor(config.name),
       // 让「这个包到底是不是正式签名」在结果里直接可读，而不是等装机时

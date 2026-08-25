@@ -119,3 +119,39 @@ versionCode 是 **2001**（当时 `buildNumber` 还默认写死 1，2000+1），
 
 双通道倒是一致：Pake 的 `continuous`（prerelease 滚动 tag）≈ 这边的
 `presets-<时间戳>`，`V3.x.x` ≈ `pakem release`。
+
+---
+
+# 在线构建成为对外入口
+
+> 2026-08-25
+
+`pakem` 本地跑要 Flutter SDK + Android SDK + JDK，这套环境是普通用户打一个包
+的主要门槛，而 CLI 本身又没有分发渠道（见 [`versioning.md`](./versioning.md)
+里 pake_cli 那节）。参照 tw93/Pake 的四层分发（下载现成包 / 在线构建 / npm 装
+CLI / 克隆定制），这边现阶段最现实的是**在线构建**——用户什么都不用装。
+
+`build.yml` 本来就不差：签名回落有警告写进 job summary，产物自动发成 Release
+（比 Pake 只给 Artifacts 强，那个 90 天过期），还有个 smoke job 解开 APK 比对
+`pake.json` 三个字段。缺的是让人找得到、用得对，所以这轮补的是入口和说明：
+
+- README 加「在线构建」一节：**第一步是 fork**——`workflow_dispatch` 要仓库
+  写权限，在别人的仓库里根本看不到 `Run workflow` 按钮，这一步不写用户会卡死
+- `build.yml` 补 `icon` / `version` 两个可选输入，空值用 `${VAR:+--flag "$VAR"}`
+  整段省掉（实测内层引号有效，带空格的路径不会被拆词）
+- `pakem build --json` 输出补 `version` 字段，release notes 从构建结果读版本，
+  不在 workflow 里重抄一遍 CLI 的默认值等它腐化
+
+## 两个必须写进文档的行为断点
+
+**一、fork 出来的包不能升级。** fork 里没有签名 secret，回落到 Flutter 的
+debug key，而那个 key 每次构建都不一样。后果不是装不上，是装得上但**升不了级**
+——第二次构建的包覆盖不了第一次的，只能卸载重装丢数据。给了在自己 fork 里配
+三个 secret 的做法。这一条比 Pake 的桌面场景严重：那边 dmg 没签名右键打开就绕过了。
+
+**二、自己构建的包，「检查更新」永远没反应。** `updateRepo` 写死
+`sunbird89629/pake_mobile`，而用户的 release 发在自己的 fork 里，两边对不上。
+不写明的话这看起来就是个 bug。
+
+构建耗时用的是实测值（`gh run list` 看 build-presets 近六次，都是 4~5 分钟），
+冷缓存那次没有数据就只说「明显更久」，不编数字。

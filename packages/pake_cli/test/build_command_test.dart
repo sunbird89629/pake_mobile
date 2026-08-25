@@ -152,6 +152,8 @@ void main() {
     final json = jsonDecode(sink.toString()) as Map<String, Object?>;
     expect(json['artifacts'], [archived]);
     expect(json['archivedInto'], ws.outDirFor('Weibo'));
+    // 没传 --version，落到 CLI 默认值——机器读结果时不该还要自己猜是哪一版。
+    expect(json['version'], '1.0.0');
   });
 
   test('sync + materialize run inside withLock, so a held lock blocks the '
