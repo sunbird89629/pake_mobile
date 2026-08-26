@@ -203,14 +203,21 @@ cd packages/pake_cli && dart test          # smoke test 默认跳过
 cd packages/pake_shell && flutter test
 ```
 
-跑一次真实构建（数分钟，冷 Gradle）：
+打了 `smoke` tag 的两个用例默认跳过，要显式跑：
 
 ```bash
+# 两个一起跑：真实构建一次 APK + 图标发现（数分钟，冷 Gradle）
 cd packages/pake_cli && dart test --tags smoke --run-skipped
+
+# 只跑真打网络的图标发现验证（几秒）
+cd packages/pake_cli && dart test test/icon_discovery_live_test.dart --run-skipped
 ```
 
 `--tags smoke` 只选中用例，不解除 `dart_test.yaml` 里的 `skip:`；
-必须带 `--run-skipped` 才会真正执行，CI 的 build workflow 用的是
-同一条命令。
+必须带 `--run-skipped` 才会真正执行。
+
+**CI 不跑这两个。** `build.yml` 里那个叫 `smoke` 的 job 跟测试标签没有关系
+——它验的是构建出来的 APK 里 `pake.json` 对不对，一行 `dart test` 都不跑。
+所以图标那个用例哪天因为 x.com 改版而变红，只会红在你手上，不会把 CI 搞红。
 
 发版前跑 [手动回归清单](docs/manual-regression.md)。
