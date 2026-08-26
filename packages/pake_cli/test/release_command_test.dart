@@ -11,11 +11,19 @@ import 'package:test/test.dart';
 
 /// 记下 gh 被怎么调的，不真的发布。
 class _FakeRunner implements ProcessRunner {
-  _FakeRunner({this.exitCode = 0, this.stderr = ''});
+  _FakeRunner({
+    this.exitCode = 0,
+    this.stderr = '',
+    this.exitCodeFor = const {},
+  });
 
   final calls = <List<String>>[];
   final int exitCode;
   final String stderr;
+
+  /// 按 gh 子命令（`create` / `view`）覆盖退出码。`--skip-existing` 要分辨
+  /// 「这个 tag 查得到」和「查不到」，而两次调用走的是同一个 runner。
+  final Map<String, int> exitCodeFor;
 
   @override
   Future<ProcessResult> run(
@@ -26,7 +34,7 @@ class _FakeRunner implements ProcessRunner {
     calls.add([executable, ...args]);
     return ProcessResult(
       0,
-      exitCode,
+      exitCodeFor[args.length > 1 ? args[1] : ''] ?? exitCode,
       'https://github.com/o/r/releases/x',
       stderr,
     );
@@ -166,6 +174,52 @@ void main() {
         ),
       ),
     );
+  });
+
+  group('--prerelease', () {
+    test('hands the flag to gh so the shell will skip it', () async {
+      // 壳的 pickUpdate 跳过 prerelease——这是「先自己装上验」的实现方式。
+      archive('4KVM', ['app-arm64-v8a-release.apk']);
+
+      await run(['--prerelease']);
+
+      expect(runner.calls.single, contains('--prerelease'));
+    });
+
+    test('is off by default', () async {
+      archive('4KVM', ['app-arm64-v8a-release.apk']);
+
+      await run([]);
+
+      expect(runner.calls.single, isNot(contains('--prerelease')));
+      // 不带 --skip-existing 就别去 view：本地重复 tag 该由 gh 报错拦下。
+      expect(runner.calls.single, isNot(contains('view')));
+    });
+  });
+
+  group('--skip-existing', () {
+    test('publishes nothing when the tag is already out there', () async {
+      // CI 一次构建全部 preset，多数版本号没动过——「已经发过了」是常态。
+      archive('4KVM', ['app-arm64-v8a-release.apk']);
+      final r = _FakeRunner(exitCodeFor: const {'view': 0});
+
+      final code = await run(['--skip-existing'], withRunner: r);
+
+      expect(code, 0);
+      expect(r.calls.single, containsAllInOrder(['gh', 'release', 'view']));
+      expect(out.toString(), contains('fourkvm-v1.2.0'));
+    });
+
+    test('publishes as usual when the tag is not taken', () async {
+      archive('4KVM', ['app-arm64-v8a-release.apk']);
+      // `gh release view` 对不存在的 tag 返回非 0。
+      final r = _FakeRunner(exitCodeFor: const {'view': 1});
+
+      final code = await run(['--skip-existing'], withRunner: r);
+
+      expect(code, 0);
+      expect(r.calls.last, containsAllInOrder(['gh', 'release', 'create']));
+    });
   });
 
   test('needs a name and bundle id it can trust', () async {

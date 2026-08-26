@@ -112,31 +112,49 @@ tag 由 CLI 拼成 `<bundleId 末段>-v<version>`（`com.pake.fourkvm` + `1.2.0`
 `pakem doctor` 会报它在不在。
 
 `pakem release` **不构建**：它只发 `~/.pake/out/<app>/` 里已经躺着的那份，
-逼你先把包装到真机上验过。想灰度就在 GitHub 上把 release 勾成 pre-release
+逼你先把包装到真机上验过。想灰度就加 `--prerelease`（或事后在 GitHub 上勾）
 ——app 端跳过 prerelease，验完再取消勾选。取消后**最长要等一分钟才生效**：
 未登录的 `api.github.com` 响应有约 60 秒 CDN 缓存。
 
 四条已知边界，都是刻意接受的：
 
-- **debug key 签的包不拦。** 发出去了用户覆盖安装只会看到「应用未安装」，
-  排查成本很高。发布前确认 `pakem build` 输出里的 `androidSigning`
+- **`pakem release` 不拦 debug key 签的包。** 发出去了用户覆盖安装只会看到
+  「应用未安装」，排查成本很高。发布前自己确认 `pakem build` 输出里的
+  `androidSigning`。（预设那条 CI 通道会拦，见下）
 - **只拉一页 100 条 release。** 所有 app 共用主仓，某个 app 的最新版被挤出
   这 100 条就再也检测不到
 - **墙内基本查不到。** `api.github.com` 不可达时一律静默——不弹错、不重试
 - **只给 arm64 设备推包。** 构建是 `--split-per-abi` 的三个 APK，app 端认
   `arm64-v8a`；只剩 32 位的老设备拿到的包装不上。一条 release 里挂了多个 app
-  的包时（CI 的 `presets-*` 就是这样）再按 app 名筛一道，筛不出唯一一个就
-  回落到 release 页面让人自己挑
-
-CI 里 `build-presets.yml` 发的那种 `presets-<时间戳>` release 一个 app 都
-检测不到（tag 前缀对不上，这是设计使然）。它是持续构建，`pakem release`
-才是面向用户的发布通道。
+  的包时再按 app 名筛一道，筛不出唯一一个就回落到 release 页面让人自己挑
 
 ## 预设站点
 
 `presets/` 下一个 json 一个 app，手动触发 `build-presets.yml` 会把它们并成
-矩阵一次性全构建，产物挂进同一条 `presets-<时间戳>` release。加一个站点 =
-加一个 json 文件。
+矩阵一次性全构建。加一个站点 = 加一个 json 文件。
+
+**预设 app 只由 CI 签名和发布，release key 不放在笔记本上。** 这不是洁癖：
+本地和 CI 各存一张证书的话，没有任何东西能保证它们是同一张，而一旦不是，
+先从 Releases 页面下过包的用户再装另一条路径出的版本就是「应用未安装」，
+他也不会知道为什么。收敛到一处，这个问题就不需要靠核对来维持。
+
+每个 preset 各发一条自己的 release，tag 和 `pakem release` 同一个规则
+（`fourkvm-v1.2.0`）——workflow 直接调 `pakem release`，不在 YAML 里重写一遍
+tag 格式。发出来一律是 **pre-release**，所以已装的 app 不会看见它：
+
+```
+改 presets/4kvm.json 的 version → 跑 build-presets.yml
+  → fourkvm-v1.2.0 (pre-release)
+  → 下载 APK 装到真机上验
+  → 在 GitHub 上取消 pre-release 勾选 → 用户收到更新提示
+```
+
+版本号没动过的 preset 会被跳过（job summary 里会写明是哪个、为什么）——一次
+跑构建全部三个 app，「这个版本已经发过了」是常态，不是错误。
+
+**签名不对就不发。** 没配 `ANDROID_KEYSTORE_*` secrets 时构建会回落 debug
+key，那种包装不到任何别的构建之上；workflow 查到 `androidSigning` 不是
+`release` 就直接失败，产物仍然留在 Actions artifacts 里供排查。
 
 json 里的 `version` 会传给构建，漏写就回落 CLI 的默认值 `1.0.0`。它定的是
 versionCode——不 bump 的话新出的包在系统眼里和上一个一模一样，装到同一台
@@ -166,6 +184,9 @@ versionCode——不 bump 的话新出的包在系统眼里和上一个一模一
 不配密钥也能出包，但会用 Flutter 的 debug key 签——**那种 APK 换台机器
 或换一次 CI 运行，签名指纹就变了**，装不到已有安装之上，也无法升级。
 `pakem build` 的结果里 `androidSigning` 字段写明本次到底用了哪种。
+
+预设 app 走 CI 那条通道，密钥只在 GitHub secrets 里，本机不需要配。下面这套
+是给自己在本地打、用 `pakem release` 发的 app 用的。
 
 配置方式是在 `~/.pake/signing.properties` 放四行（`storeFile` 用绝对路径）：
 

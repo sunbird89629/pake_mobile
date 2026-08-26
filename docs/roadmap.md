@@ -83,3 +83,9 @@
   URL、User agent、Capture network、View logs、View requests、Reset to build defaults
   只在 debug 构建里显示，开关是 `kShowDebugSettings`；正式包的逃生口是
   `pakem build --debug-ui`。落地过程见 [`develop_log.md`](./develop_log.md)。
+
+- **预构建 app 的签名与发布收敛到 CI**（2026-08-26）
+  `build-presets.yml` 现在每个 preset 各发一条 `<bundleId 末段>-v<version>` 的
+  pre-release（直接调 `pakem release`，tag 格式不在 YAML 里重写），验过再取消
+  勾选转正；签名不是 release 就直接失败。落地过程见
+  [`develop_log.md`](./develop_log.md)。

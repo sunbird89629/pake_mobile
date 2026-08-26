@@ -40,7 +40,22 @@ class ReleaseCommand extends Command<int> {
       _workspace = workspace ?? Workspace() {
     argParser
       ..addOption('config')
-      ..addOption('notes');
+      ..addOption('notes')
+      // 壳的更新检查会跳过 prerelease（见 update_check.dart 的 pickUpdate），
+      // 所以发成 prerelease 等于「先放在那儿只给自己装」，在 GitHub 上取消
+      // 勾选才推给所有人。
+      ..addFlag(
+        'prerelease',
+        negatable: false,
+        help: 'Publish as a pre-release — installed apps will not offer it.',
+      )
+      // 给 CI 用：一次构建全部 preset，其中多数版本号没动过。这条路径上
+      // 「这个版本已经发过了」是常态而不是错误。
+      ..addFlag(
+        'skip-existing',
+        negatable: false,
+        help: 'Exit 0 without publishing when the tag already exists.',
+      );
   }
 
   final Output _output;
@@ -93,6 +108,14 @@ class ReleaseCommand extends Command<int> {
     final tag = tagFor(config);
     final notes = args.option('notes');
 
+    if (args.flag('skip-existing')) {
+      final existing = await _runner.run('gh', ['release', 'view', tag]);
+      if (existing.exitCode == 0) {
+        _output.success({'tag': tag, 'skipped': 'tag already published'});
+        return 0;
+      }
+    }
+
     final result = await _runner.run('gh', [
       'release',
       'create',
@@ -102,6 +125,7 @@ class ReleaseCommand extends Command<int> {
       '${config.name} ${config.version}',
       // 自己写了说明就用自己的，否则让 gh 从 commit 生成——两者互斥。
       if (notes != null) ...['--notes', notes] else '--generate-notes',
+      if (args.flag('prerelease')) '--prerelease',
     ]);
 
     if (result.exitCode != 0) {
@@ -116,6 +140,8 @@ class ReleaseCommand extends Command<int> {
       'tag': tag,
       'assets': artifacts.map(p.basename).toList(),
       'url': result.stdout.toString().trim(),
+      // 发出去的东西用户看不看得见，不该靠人回忆命令行敲了什么。
+      'prerelease': args.flag('prerelease'),
     });
     return 0;
   }

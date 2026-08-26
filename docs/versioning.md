@@ -104,15 +104,19 @@ Android 拒绝 versionCode 更低的包覆盖安装（`INSTALL_FAILED_VERSION_DO
 调 version 之前先确认新值推出来的 versionCode 高于**用户手上那个包**的，
 不是高于仓库里最后一次构建的。
 
-## 两条发布通道，只有一条参与更新检测
+## 两条发布通道，同一套 tag 规则
 
-- **`build-presets.yml`（CI）** —— 持续构建。产物挂在 `presets-<时间戳>`
-  release 上，tag 前缀对不上 `parseTag()` 的规则，**一个 app 都检测不到，
-  这是设计使然**。它是给自己验包用的。
-- **`pakem release`** —— 面向用户。tag 是 `<bundleId 末段>-v<semver>`
-  （`com.pake.fourkvm` + `0.2.0` → `fourkvm-v0.2.0`），壳里按同样规则筛。
+- **`build-presets.yml`（CI）** —— 预设 app 走这条。密钥只在 GitHub secrets
+  里，本机不放。
+- **`pakem release`（本地）** —— 自己一次性打的 app 走这条。
 
-手动建 release 时 tag 写错就是静默失效，这正是 `pakem release` 存在的理由。
+两条都用 `pakem release` 拼 tag：`<bundleId 末段>-v<semver>`（`com.pake.fourkvm`
++ `0.2.0` → `fourkvm-v0.2.0`），壳里按同样规则筛。**手动建 release 时 tag 写错
+就是静默失效**，这正是两条通道都过 CLI 而不是各写各的理由。
+
+区别只在谁签、谁发，不在 tag。CI 那条一律先发成 **pre-release**——`pickUpdate()`
+跳过 prerelease，所以包躺在 Releases 上但没有任何已装 app 会看见它；下载装到
+真机验过，再在 GitHub 上取消勾选，那一刻才真正推给用户。
 
 ## 当前起点
 
@@ -163,5 +167,6 @@ Android 拒绝 versionCode 更低的包覆盖安装（`INSTALL_FAILED_VERSION_DO
 判据自始至终是同一条：*有没有人（或程序）依据这个号做决定*。Pake 那边没人读
 app 号，所以共用省事；这边是代码在自动读，所以必须独立且准确。
 
-顺带一提，双通道两边一致：Pake 的 `continuous`（prerelease，滚动 tag）对应
-这边的 `presets-<时间戳>`，`V3.x.x` 对应 `pakem release`。
+顺带一提，两边的灰度形状一致：Pake 用 `continuous`（prerelease，滚动 tag）
+和 `V3.x.x` 分开两条 release，这边是同一条 release 的两个状态——先 prerelease
+供自己验，取消勾选即转正。

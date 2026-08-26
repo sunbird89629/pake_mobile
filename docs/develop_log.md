@@ -341,3 +341,59 @@ CLI 是唯一的构建入口。
 
 三个包依次装到真机上验过：默认 release（四组，无悬空分隔线）、修完空分组的
 release、`--debug-ui` 的 release（六项全回来，且仍是 release 签名）。
+
+
+## 预构建 app 的签名与发布收敛到 CI
+
+原来有两条签名路径，而用户两条都够得着：正式版是笔记本上 `pakem release` 发的
+（`~/.pake/signing.properties`），CI 的 `presets-<时间戳>` 用的是
+`ANDROID_KEYSTORE_BASE64` secret。两批包 applicationId 相同，**这两张证书一旦
+不是同一张**，先从 Releases 页面下过 CI 包的用户再装正式版就是「应用未安装」，
+而且没有任何东西核对过它们一致。
+
+收敛的方向不是「加一步核对」，是把其中一条去掉：预设 app 只由 CI 签、只由 CI
+发，release key 不放在笔记本上。
+
+### 缺的不是签名能力，是发布路径
+
+`build-presets.yml` 早就会签了。问题在两个 workflow 打的 tag
+（`presets-<时间戳>` / `<app>-<时间戳>`）都不参与更新检查——`parseTag()` 只认
+`fourkvm-v1.2.0`。所以 CI 出的包用户能下能装，但推不动更新，正式发布只能回到
+笔记本上，key 也就必须留在笔记本上。
+
+改成每个 preset 各发一条自己的 release，聚合的 `presets-<时间戳>` 取消。顺带
+消掉一处隐患：`_downloadUrl()` 里那段「一条 release 里挂了多个 app 的包，只按
+ABI 筛的话 DADATU 用户会拿到 4KVM 的包」的补救逻辑，现在没有输入能触发它了。
+
+### tag 格式不在 YAML 里重写
+
+`<bundleId 末段>-v<version>` 已经在两个地方写着了（CLI 的 `tagFor()` 写、壳的
+`parseTag()` 读），YAML 里再抄一遍就是第三处，而写错一个字符的表现是**静默
+失效**：包发出去了，没有一个用户收得到。
+
+所以 workflow 直接调 `pakem release`——把 matrix 里那份 preset 原样写成一个
+`pake.json` 交给它，tag 它自己推，归档产物它自己找。为此给 CLI 加了两个 flag：
+
+- `--prerelease`：壳的 `pickUpdate()` 跳过 prerelease，所以这是「先放上去只给
+  自己装」的实现方式。原来 README 让人事后去 GitHub 界面手动勾。
+- `--skip-existing`：先 `gh release view`，查得到就报 `skipped` 退出 0。一次跑
+  构建全部三个 preset，多数版本号没动过，「这个版本已经发过了」是常态路径而不
+  是错误。
+
+### 签名不对就不发
+
+原来只在 job summary 上留一个 warning，一个 debug key 签的包照样发出去。现在
+`androidSigning` 不是 `release` 就直接 fail——这批包是给用户装的，而 debug 签名
+的包装不到任何别的构建之上。artifacts 在这一步之前就传完了，失败不影响拿包排查。
+
+### 验证
+
+CI 改动没法靠单测覆盖，所以把两个 step 的 shell 抽出来，用假的 `gh`、假的
+`~/.pake/out/` 产物和假的 `build.json` 在本地跑：
+
+- tag 不存在 → `gh release create fourkvm-v0.2.0 … --prerelease`，notes 顶格
+  （早期版本用多行字符串拼 notes，行首 10 个空格在 Markdown 里会变成代码块）
+- tag 已存在 → 只调了 `gh release view`，summary 写「bump version 才会发布」
+- `androidSigning: debug` → exit 1，`::error::` 带出原因
+
+CLI 那两个 flag 有单测（4 条），把实现挖掉验证过会红。

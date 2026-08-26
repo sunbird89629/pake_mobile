@@ -8,19 +8,19 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       presets: ${{ steps.read.outputs.presets }}
-      names: ${{ steps.read.outputs.names }}
     steps:
       - uses: actions/checkout@v4
       - id: read
         run: |
           PRESETS=$(jq -c -n '[inputs | {name, url, bundleId, version}]' presets/*.json)
-          NAMES=$(jq -r '.[].name' <<< "$PRESETS" | paste -sd, -)
           echo "presets=$PRESETS" >> "$GITHUB_OUTPUT"
-          echo "names=$NAMES" >> "$GITHUB_OUTPUT"
 
   android:
     needs: matrix
     runs-on: ubuntu-latest
+    # 每个 preset 自己发自己那条 release，不再汇总到一个 job 里。
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -98,6 +98,63 @@ jobs:
           path: artifacts/
           if-no-files-found: error
 
+      # 这批包是给用户装的，所以签名不对就不能往下走。debug key 签的包装不到
+      # 任何别的构建之上，发出去用户只会看到「应用未安装」，而排查成本很高。
+      # 产物在上一步已经传完了，这里失败不影响拿包排查。
+      - name: Require a release signature
+        run: |
+          set -euo pipefail
+          MODE=$(jq -r '.androidSigning // "unknown"' "$GITHUB_WORKSPACE/build.json")
+          echo "**${{ matrix.preset.name }}** signing: \`$MODE\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$MODE" != release ]; then
+            echo "::error::${{ matrix.preset.name }} was signed with a throwaway debug key; set the ANDROID_KEYSTORE_* secrets. Nothing was published."
+            exit 1
+          fi
+
+      # tag 格式（`<bundleId 末段>-v<version>`）的真相源是 pake_cli 的
+      # `tagFor()`，这里不重写一遍——把 preset 原样写成一份 pake.json，让
+      # `pakem release` 自己推 tag、自己找归档产物。写错一个字符就是静默
+      # 失效：壳按同样的规则筛 tag，对不上就永远收不到更新。
+      #
+      # 一律发成 prerelease：壳的更新检查跳过 prerelease，所以这一步只是把
+      # 包放到 Releases 上供自己下载安装，验过之后在 GitHub 上取消勾选，才
+      # 真正推给所有用户。
+      - name: Publish pre-release
+        working-directory: packages/pake_cli
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRESET_JSON: ${{ toJson(matrix.preset) }}
+          APP: ${{ matrix.preset.name }}
+          URL: ${{ matrix.preset.url }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$PRESET_JSON" > "$RUNNER_TEMP/preset.json"
+          VERSION=$(jq -r '.version // "unknown"' "$GITHUB_WORKSPACE/build.json")
+          ICON=$(jq -r '.icon // "unknown"' "$GITHUB_WORKSPACE/build.json")
+          # 每行都得顶格：Markdown 里缩进 4 个空格就变成代码块了。
+          NOTES=$(printf '%s\n' \
+            "Built from \`presets/\` by CI." \
+            "" \
+            "**URL:** $URL" \
+            "**Version:** $VERSION" \
+            "**Icon:** $ICON" \
+            "" \
+            "Still a pre-release, so installed apps skip it. Install this APK, check it, then untick pre-release to hand it to everyone.")
+
+          dart run bin/pakem.dart --json release \
+            --config "$RUNNER_TEMP/preset.json" \
+            --prerelease \
+            --skip-existing \
+            --notes "$NOTES" > "$RUNNER_TEMP/release.json"
+          cat "$RUNNER_TEMP/release.json"
+
+          TAG=$(jq -r '.tag' "$RUNNER_TEMP/release.json")
+          if jq -e 'has("skipped")' "$RUNNER_TEMP/release.json" > /dev/null; then
+            echo "**$APP** — nothing published, \`$TAG\` is already out. Bump \`version\` in \`presets/\` to publish." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "**$APP** — \`$TAG\` published as a pre-release. Install it, check it, then untick pre-release." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - uses: actions/cache/save@v4
         if: always()
         with:
@@ -106,31 +163,3 @@ jobs:
             ~/.gradle/wrapper
           key: gradle-${{ runner.os }}-${{ hashFiles('packages/pake_shell/android/**/*.gradle*') }}-${{ matrix.preset.name }}-${{ github.run_id }}
 
-  release:
-    needs: [matrix, android]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: apk-*
-          path: all-artifacts/
-          merge-multiple: true
-
-      - name: Create Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          TAG="presets-$(date +%Y%m%d-%H%M%S)"
-          NOTES="Apps built from \`presets/\` on $(date -u +%Y-%m-%d)."
-          for f in all-artifacts/*.apk; do
-            cp "$f" .
-            NOTES="$NOTES\n- $(basename "$f")"
-          done
-          gh release create "$TAG" \
-            *.apk \
-            --title "Presets Build — ${{ needs.matrix.outputs.names }}" \
-            --notes "$(printf '%b' "$NOTES")"
