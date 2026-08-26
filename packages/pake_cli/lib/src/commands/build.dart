@@ -105,6 +105,10 @@ class BuildCommand extends Command<int> {
     // --icon 给了就直接用；没给则从网站 HTML / manifest / favicon.ico
     // 按优先级找，下载到临时文件再交给 materializeConfig。
     var resolvedConfig = config;
+    // 图标最终从哪来，要能在结果里读到。回落是静默的（`info` 在 `--json`
+    // 下不输出），在线构建的人只会看到包里是默认图标，无从判断是站点没图标、
+    // 下载失败、还是抓到的根本不是图片。
+    var iconSource = config.iconPath ?? 'default';
     if (config.iconPath == null) {
       final discovered = await discoverIconUrl(config.url);
       if (discovered != null) {
@@ -122,6 +126,9 @@ class BuildCommand extends Command<int> {
             final tmp = File(p.join(_workspace.root, '.icon-auto.png'));
             tmp.writeAsBytesSync(bytes);
             resolvedConfig = config.copyWith(iconPath: tmp.path);
+            // 记发现它的 URL，不是那个临时文件路径——`.icon-auto.png` 对
+            // 读结果的人没有任何意义。
+            iconSource = discovered;
           }
         } catch (e) {
           _output.info('Icon download failed ($e), using default.');
@@ -197,6 +204,8 @@ class BuildCommand extends Command<int> {
       // 版本没填时回落 CLI 默认值，机器读结果时不该还要自己猜是哪一版——
       // 在线构建的 release notes 正是靠这个字段显示版本的。
       'version': config.version,
+      // 实际用上的图标来源，或 `default`（自动发现没成，用了模板自带那张）。
+      'icon': iconSource,
       'artifacts': archived,
       'archivedInto': _workspace.outDirFor(config.name),
       // 让「这个包到底是不是正式签名」在结果里直接可读，而不是等装机时

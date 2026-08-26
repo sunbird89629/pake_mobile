@@ -151,10 +151,18 @@ jobs:
           # 用户没填 version 时这里读到的是 CLI 的默认值，不是空——
           # 版本从构建结果里读，不在 workflow 里重复一遍默认值等它腐化。
           VERSION=$(jq -r '.version // "unknown"' build.json)
+          # 图标回落在 --json 下是完全静默的：拿到包发现是默认图标时，得能
+          # 分清是站点没图标、下载失败、还是抓到的根本不是图片。
+          ICON_SOURCE=$(jq -r '.icon // "unknown"' build.json)
           TAG="$(echo "$APP" | tr 'A-Z ' 'a-z-')-$(date +%Y%m%d-%H%M%S)"
           WARNING=""
           if [ "$SIGNING" != release ]; then
             WARNING='⚠️ Signed with a throwaway debug key — this APK cannot be installed over any other build.'
+          fi
+          if [ "$ICON_SOURCE" = default ]; then
+            ICON_LINE='**Icon:** default (nothing usable found on the site)'
+          else
+            ICON_LINE="**Icon:** $ICON_SOURCE"
           fi
           gh release create "$TAG" \
             artifacts/app-*.apk \
@@ -164,6 +172,7 @@ jobs:
           **URL:** ${{ inputs.url }}
           **Bundle ID:** ${{ inputs.bundle_id }}
           **Version:** $VERSION
+          $ICON_LINE
           **Signing:** $SIGNING
 
           $WARNING

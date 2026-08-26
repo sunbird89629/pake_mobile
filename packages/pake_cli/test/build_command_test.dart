@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
+import 'package:image/image.dart' as img;
 import 'package:pake_cli/src/commands/build.dart';
 import 'package:pake_cli/src/output.dart' show Output, PakeException;
 import 'package:pake_cli/src/process_runner.dart';
@@ -154,6 +155,48 @@ void main() {
     expect(json['archivedInto'], ws.outDirFor('Weibo'));
     // 没传 --version，落到 CLI 默认值——机器读结果时不该还要自己猜是哪一版。
     expect(json['version'], '1.0.0');
+  });
+
+  // 图标回落是静默的（`info` 在 `--json` 下不输出），在线构建的人只会看到包里
+  // 是默认图标，无从判断是站点没图标、下载失败、还是抓到的根本不是图片。
+  // 显式 `--icon` 这条路不走自动发现，所以不联网，断言稳定。
+  test('reports where the icon actually came from', () async {
+    const apkName = 'app-arm64-v8a-release.apk';
+    final buildingRunner = _FakeRunner(
+      onRun: () => _write(
+        '${ws.projectDir}/build/app/outputs/flutter-apk/$apkName',
+        'apk bytes',
+      ),
+    );
+
+    final iconPath = '${tmp.path}/custom.png';
+    File(
+      iconPath,
+    ).writeAsBytesSync(img.encodePng(img.Image(width: 64, height: 64)));
+
+    final sink = StringBuffer();
+    final code =
+        await runnerFor(
+          BuildCommand(
+            Output(json: true, sink: sink),
+            runner: buildingRunner,
+            workspace: ws,
+            templateDir: templateDir,
+          ),
+        ).run([
+          'build',
+          'https://m.weibo.cn',
+          '--name',
+          'Weibo',
+          '--bundle-id',
+          'com.pake.weibo',
+          '--icon',
+          iconPath,
+        ]);
+    expect(code, 0);
+
+    final json = jsonDecode(sink.toString()) as Map<String, Object?>;
+    expect(json['icon'], iconPath);
   });
 
   test('sync + materialize run inside withLock, so a held lock blocks the '
