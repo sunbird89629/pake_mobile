@@ -12,23 +12,29 @@ enum IconTier {
   /// 也至少是 60×60，比 16×16 favicon 强。
   appleTouch(0),
 
-  /// `<link rel="icon">` 带显式 sizes ≥144px。
-  iconLarge(1),
-
-  /// `<link rel="icon">` 带显式 sizes <144px。
-  iconSmall(2),
+  /// `<link rel="icon">`，不分尺寸。
+  ///
+  /// 这里曾经分成 `iconLarge` / `iconSmall`（以 144px 为界），但分类只看
+  /// `rel` 不看 `sizes`，`iconSmall` 从来没被赋值过。删掉而不是补上那段
+  /// 分支：降一级也救不了它想救的场景——16×16 的 icon 降到下一层是 -1984，
+  /// 仍然赢过 manifest 里 512×512 的 -3488，因为 **tier 间隔 1000 比尺寸
+  /// 加成上限 999 大，tier 永远压过尺寸**。
+  ///
+  /// 小图排在大图前面这件事由下游兜住：`build` 那边有尺寸门槛，不够大就
+  /// 继续试下一个候选。
+  icon(1),
 
   /// `<link rel="shortcut icon">`。
-  shortcutIcon(3),
+  shortcutIcon(2),
 
   /// PWA `manifest.json` 里 `icons[]` 中的条目。
-  manifestIcon(4),
+  manifestIcon(3),
 
   /// `/favicon.ico`。
-  faviconIco(5),
+  faviconIco(4),
 
   /// Google S2 favicon 服务：`google.com/s2/favicons?domain=X&sz=256`。
-  googleFavicon(6),
+  googleFavicon(5),
 
   /// SVG：矢量、缩放无损——**但 `package:image` 解不了它**，拿到了也只能
   /// 丢掉回落默认图标。这一层原本排在最前（`sizes="any"` 还额外加 999 分），
@@ -36,7 +42,7 @@ enum IconTier {
   ///
   /// 排到最末而不是直接删掉：真有站点只提供 SVG 时，它仍然是唯一候选，
   /// 留着至少能让日志说清「试过了、解不了」。
-  svg(7);
+  svg(6);
 
   const IconTier(this.order);
   final int order;
@@ -78,7 +84,7 @@ List<IconCandidate> parseLinkIcons(Uri pageUri, String html) {
     if (rel == 'icon' || rel == 'shortcut icon') {
       final tier = rel == 'shortcut icon'
           ? IconTier.shortcutIcon
-          : IconTier.iconLarge;
+          : IconTier.icon;
 
       if (type == 'image/svg+xml' || url.path.endsWith('.svg')) {
         candidates.add(_candidate(url, IconTier.svg, sizes));

@@ -116,8 +116,8 @@ void main() {
 ''');
 
       final best = bestOf(candidates)!;
-      // regular icon (tier 2, 16px) = -2000 + 16 = -1984
-      // shortcut icon (tier 3, 256px) = -3000 + 256 = -2744
+      // regular icon (tier 1, 16px) = -1000 + 16 = -984
+      // shortcut icon (tier 2, 256px) = -2000 + 256 = -1744
       // regular icon wins despite smaller size
       expect(best.url, endsWith('/icon.png'));
     });
@@ -148,8 +148,8 @@ void main() {
 </head></html>
 ''');
 
-      // multi: 48px → -2000 + 48 = -1952
-      // single: 64px → -2000 + 64 = -1936  ← higher
+      // multi: 48px → -1000 + 48 = -952
+      // single: 64px → -1000 + 64 = -936  ← higher
       final best = bestOf(candidates)!;
       expect(best.url, endsWith('/single.png'));
     });
@@ -186,7 +186,7 @@ void main() {
 
       expect(rankedUrls(candidates), [
         'https://example.com/apple.png', // appleTouch
-        'https://example.com/huge.png', // iconLarge
+        'https://example.com/huge.png', // icon
         'https://example.com/shortcut.png', // shortcutIcon
         'https://example.com/icon.svg', // svg，垫底
       ]);
