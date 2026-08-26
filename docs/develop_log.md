@@ -272,3 +272,72 @@ Actual:   https://example.com/favicon.ico?x=1#frag
 
 顺带修了两处被上一轮 tier 重排改成错的注释（`_score` 还写着「SVG 在一切
 非 SVG 之上」）。
+
+
+## 正式包里藏掉设置页的调试项
+
+设置页原本 12 项一视同仁地摆着，其中 URL、User agent、Capture network、
+View logs、View requests、Reset to build defaults 六项是开发时用的。普通用户
+看不懂，更麻烦的是**前两项按错了这个壳就废了**——把 URL 改成一个打不开的地址
+之后，页面是白的，底部栏还在，但唯一能救回来的 Reset 恰好也在这一组里，用户
+得先在一堆看不懂的选项里认出它。
+
+开关用 `kShowDebugSettings`（`pake_shell/lib/src/debug_ui.dart`）：
+
+```dart
+const kShowDebugSettings = kDebugMode || bool.fromEnvironment('PAKE_DEBUG_UI');
+```
+
+选 `kDebugMode` 而不是 Android flavor，是因为两边本来就对齐了：`pakem build`
+永远走 `--release`，开发永远是 `flutter run`。flavor 那套要动 build.gradle、
+CLI 流水线和 CI 矩阵，换来的是同一条边界。
+
+### 一个 const 是测不出来的
+
+`kShowDebugSettings` 是编译期常量，而 widget 测试永远跑在 debug 模式下——它在
+测试里恒为 true，正式包那条路径根本进不去。所以 `DebugDrawer` 上多了一个
+`showDebugItems` 参数，默认值就是那个 const，测试显式传 `false`。
+
+新用例里绕了一圈才写对：一开始用 `find.text('Clear cache & cookies')` 断言
+「留着」，红了——`ListView` 懒加载，那一项在默认视口下压根没被 build。反过来
+更糟：`find.text('View logs')` 的 `findsNothing` 会因为同一个原因**假通过**，
+把「没渲染」当成「被藏了」。最后改成直接读 `ListView` 的 children：
+
+```dart
+(tester.widget<ListView>(find.byType(ListView)).childrenDelegate
+        as SliverChildListDelegate)
+    .children
+```
+
+问的是「在不在这份列表里」，跟视口无关。顺手加了一条「列表头尾不能是
+Divider」——每个调试项都是连着一条分隔线一起藏的，藏错了就会在两端留下一条
+悬空的横线。
+
+### 顺带修了错误页的一句谎
+
+`ErrorPage` 在 badUrl 时说的是「The address may be wrong — open settings to
+change it.」，而正式包里那个输入框已经不在了。加了 `canEditUrl`（同样默认跟
+着 `kShowDebugSettings`），正式包改说「the site may have moved」。「Open
+settings」按钮两边都留着——清缓存还在里面。
+
+### 逃生口
+
+包已经装在真机上、要现场看日志或抓包时，`pakem build --debug-ui` 会往
+`flutter build` 里加 `--dart-define=PAKE_DEBUG_UI=true`，仍然是 release 构建，
+只是把那六项放回去。没有这个 flag 的话，注释里写的那个 define 谁也用不上——
+CLI 是唯一的构建入口。
+
+
+### 真机上才看见的空分组
+
+`pakem build`（永远 release）出包装到 Pixel 上验证，设置页确实只剩四组。但也
+立刻看见一个原本被挡着的问题：这个测试 app 没有注入脚本，「Inject scripts」
+的标题和那句「toggling a script reloads the page」还在，**底下一个开关都
+没有**——而藏掉 URL / UA 之后，这个空分组正好落在页面第一屏最上面。
+
+改成 `scripts.isNotEmpty` 时整组（标题 + 说明 + 分隔线）一起不出现。这个
+毛病在 debug 包里一直存在，只是夹在中间没人注意；把上面的东西拿掉，它就成了
+进设置页第一眼看到的东西。
+
+三个包依次装到真机上验过：默认 release（四组，无悬空分隔线）、修完空分组的
+release、`--debug-ui` 的 release（六项全回来，且仍是 release 签名）。

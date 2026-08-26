@@ -52,17 +52,21 @@ void main() {
   });
 
   group('ErrorPage', () {
-    Future<void> pump(WidgetTester tester, LoadFailureKind kind) =>
-        tester.pumpWidget(
-          MaterialApp(
-            home: ErrorPage(
-              kind: kind,
-              url: 'https://m.weibo.cn',
-              onRetry: () {},
-              onOpenSettings: () {},
-            ),
-          ),
-        );
+    Future<void> pump(
+      WidgetTester tester,
+      LoadFailureKind kind, {
+      bool canEditUrl = true,
+    }) => tester.pumpWidget(
+      MaterialApp(
+        home: ErrorPage(
+          kind: kind,
+          url: 'https://m.weibo.cn',
+          onRetry: () {},
+          onOpenSettings: () {},
+          canEditUrl: canEditUrl,
+        ),
+      ),
+    );
 
     testWidgets('offline tells the user to wait, and offers no url edit', (
       tester,
@@ -78,6 +82,18 @@ void main() {
 
       expect(find.text('Open settings'), findsOneWidget);
       expect(find.textContaining('https://m.weibo.cn'), findsOneWidget);
+    });
+
+    testWidgets('bad url stops promising a url edit the release build lacks', (
+      tester,
+    ) async {
+      // 正式包的设置页里没有 URL 输入框，再说「open settings to change it」
+      // 就是把人支去一个不存在的地方。设置入口本身还留着（能清缓存）。
+      await pump(tester, LoadFailureKind.badUrl, canEditUrl: false);
+
+      expect(find.textContaining('change it'), findsNothing);
+      expect(find.textContaining('https://m.weibo.cn'), findsOneWidget);
+      expect(find.text('Open settings'), findsOneWidget);
     });
 
     testWidgets('every failure kind offers an escape into settings', (

@@ -49,7 +49,14 @@ class BuildCommand extends Command<int> {
       ..addOption('version')
       ..addOption('team-id')
       ..addOption('profile')
-      ..addMultiOption('inject');
+      ..addMultiOption('inject')
+      // 正式包默认藏掉设置页里的调试项（URL、UA、抓包、日志、重置）。
+      // 这个开关是给「包已经在真机上了、要现场排查」留的后门。
+      ..addFlag(
+        'debug-ui',
+        negatable: false,
+        help: 'Keep the developer-only settings in a release build.',
+      );
   }
 
   final Output _output;
@@ -223,6 +230,7 @@ class BuildCommand extends Command<int> {
         runner: _runner,
         output: _output,
         exportOptionsPath: exportOptionsPath,
+        debugUi: args.flag('debug-ui'),
       );
     });
 

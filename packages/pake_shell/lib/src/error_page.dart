@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'debug_ui.dart';
+
 enum LoadFailureKind { offline, badUrl, serverError }
 
 /// 分类决定给用户什么建议。给断网的人一个「改 URL」按钮是误导。
@@ -58,6 +60,7 @@ class ErrorPage extends StatelessWidget {
     required this.url,
     required this.onRetry,
     required this.onOpenSettings,
+    this.canEditUrl = kShowDebugSettings,
   });
 
   final LoadFailureKind kind;
@@ -65,11 +68,18 @@ class ErrorPage extends StatelessWidget {
   final VoidCallback onRetry;
   final VoidCallback onOpenSettings;
 
+  /// 设置页里还有没有那个能改 URL 的输入框。正式包里没有（见
+  /// [kShowDebugSettings]），那句「open settings to change it」就成了把人
+  /// 支去一个不存在的地方。
+  final bool canEditUrl;
+
   String get _message => switch (kind) {
     LoadFailureKind.offline =>
       'No network connection. Check your Wi-Fi or mobile data, then retry.',
-    LoadFailureKind.badUrl =>
+    LoadFailureKind.badUrl when canEditUrl =>
       'Could not load $url. The address may be wrong — open settings to change it.',
+    LoadFailureKind.badUrl =>
+      'Could not load $url. The address may be wrong, or the site may have moved.',
     LoadFailureKind.serverError =>
       'The server at $url returned an error. It may be temporarily down.',
   };

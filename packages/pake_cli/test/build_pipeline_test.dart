@@ -136,6 +136,25 @@ void main() {
       expect(args, contains('--export-options-plist=/tmp/ExportOptions.plist'));
       expect(args, isNot(contains('--split-per-abi')));
     });
+
+    test('hides the settings page debug items unless asked', () {
+      // 默认不带这个 define，pake_shell 的 kShowDebugSettings 在 --release
+      // 下就是 false——正式包里 URL / UA / 抓包 / 日志 / 重置 全都不出现。
+      final args = flutterBuildArgs(PakePlatform.android, _config);
+
+      expect(args, isNot(contains('--dart-define=PAKE_DEBUG_UI=true')));
+    });
+
+    test('--debug-ui keeps them in a release build', () {
+      final args = flutterBuildArgs(
+        PakePlatform.android,
+        _config,
+        debugUi: true,
+      );
+
+      expect(args, contains('--dart-define=PAKE_DEBUG_UI=true'));
+      expect(args, contains('--release'), reason: 'still a release build');
+    });
   });
 
   group('runBuild', () {

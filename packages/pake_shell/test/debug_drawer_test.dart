@@ -47,18 +47,22 @@ void main() {
     reloadCount = 0;
   });
 
-  Future<void> pump(WidgetTester tester, {UpdateService? updateService}) =>
-      tester.pumpWidget(
-        MaterialApp(
-          home: DebugDrawer(
-            config: config,
-            onReloadRequested: () => reloadCount++,
-            onClearCache: () async {},
-            netLog: NetLog(),
-            updateService: updateService,
-          ),
-        ),
-      );
+  Future<void> pump(
+    WidgetTester tester, {
+    UpdateService? updateService,
+    bool showDebugItems = true,
+  }) => tester.pumpWidget(
+    MaterialApp(
+      home: DebugDrawer(
+        config: config,
+        onReloadRequested: () => reloadCount++,
+        onClearCache: () async {},
+        netLog: NetLog(),
+        updateService: updateService,
+        showDebugItems: showDebugItems,
+      ),
+    ),
+  );
 
   /// 点到「Check for updates」那一行——它在列表底部，得先滚过去。
   Future<void> tapCheckForUpdates(WidgetTester tester) async {
@@ -161,6 +165,25 @@ void main() {
       expect(reloadCount, 1, reason: 'scripts only take effect on next load');
     });
 
+    testWidgets('drops the whole group when no script is bundled', (
+      tester,
+    ) async {
+      // 只剩一个标题和「toggling a script reloads the page」的说明、底下一个
+      // 开关都没有，是在讲一件这个 app 里不存在的事。正式包里藏掉 URL / UA
+      // 之后它还正好落在页面顶部——真机上一眼就看见了。
+      config = RuntimeConfig.fromBuildTime(
+        const PakeConfig(
+          name: 'Weibo',
+          url: 'https://m.weibo.cn',
+          bundleId: 'com.pake.weibo',
+        ),
+      );
+      await pump(tester);
+
+      expect(find.text('Inject scripts'), findsNothing);
+      expect(find.textContaining('take effect'), findsNothing);
+    });
+
     testWidgets('states plainly that toggles apply on reload', (tester) async {
       // 不写清楚，用户会以为开关坏了。
       await pump(tester);
@@ -193,6 +216,94 @@ void main() {
       await pump(tester);
 
       expect(find.textContaining('https://m.weibo.cn'), findsWidgets);
+    });
+  });
+
+  group('release build', () {
+    /// 直接读 `ListView` 的 children，而不是 `find.text`——列表底部的项在默认
+    /// 视口下压根没被 build，用 find 断言「找不到」会把「没渲染」当成「被藏了」，
+    /// 一路假通过。这里问的是「在不在这份列表里」。
+    List<Widget> childrenOf(WidgetTester tester) =>
+        (tester.widget<ListView>(find.byType(ListView)).childrenDelegate
+                as SliverChildListDelegate)
+            .children;
+
+    List<String> titlesOf(WidgetTester tester) => childrenOf(tester)
+        .map(
+          (w) => w is ListTile
+              ? w.title
+              : w is SwitchListTile
+              ? w.title
+              : null,
+        )
+        .whereType<Text>()
+        .map((t) => t.data)
+        .whereType<String>()
+        .toList();
+
+    testWidgets('drops the developer-only items', (tester) async {
+      await pump(tester, showDebugItems: false);
+
+      // URL 和 User agent 是最危险的两个：普通用户改错了，这个壳就变成一个
+      // 打不开的空白页，而唯一的退路（Reset）也在这一组里。
+      expect(
+        titlesOf(tester),
+        isNot(
+          anyElement(
+            isIn([
+              'URL',
+              'User agent',
+              'Capture network',
+              'View logs',
+              'View requests',
+              'Reset to build defaults',
+            ]),
+          ),
+        ),
+      );
+    });
+
+    testWidgets('keeps everything a normal user needs', (tester) async {
+      await pump(tester, showDebugItems: false);
+
+      expect(
+        titlesOf(tester),
+        containsAll([
+          // 注入脚本留着：`hide-ads` 这类开关对用户是实打实的功能，不是调试项。
+          'hide-ads',
+          'App lock',
+          'Version',
+          'Check for updates',
+          'Clear cache & cookies',
+        ]),
+      );
+    });
+
+    /// 每个调试项都是连着一条 Divider 一起藏的，藏错了就会在列表头尾留下一条
+    /// 悬空的横线——不算 bug，但一眼就丑。
+    testWidgets('leaves no dangling divider at either end', (tester) async {
+      await pump(tester, showDebugItems: false);
+
+      expect(childrenOf(tester).first, isNot(isA<Divider>()));
+      expect(childrenOf(tester).last, isNot(isA<Divider>()));
+    });
+
+    testWidgets('shows them again when the flag is left to the build mode', (
+      tester,
+    ) async {
+      // 不传参数 = 用 kShowDebugSettings，而测试永远跑在 debug 模式下。
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DebugDrawer(
+            config: config,
+            onReloadRequested: () => reloadCount++,
+            onClearCache: () async {},
+            netLog: NetLog(),
+          ),
+        ),
+      );
+
+      expect(find.text('URL'), findsOneWidget);
     });
   });
 

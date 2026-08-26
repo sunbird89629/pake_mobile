@@ -4,6 +4,7 @@ import 'package:debug_sheet/debug_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:pake_config/pake_config.dart';
 
+import 'debug_ui.dart';
 import 'lock/pattern_dialog.dart';
 import 'log_page.dart';
 import 'net/net_log.dart';
@@ -38,6 +39,7 @@ class DebugDrawer extends StatefulWidget {
     required this.netLog,
     this.logsDir,
     this.updateService,
+    this.showDebugItems = kShowDebugSettings,
   });
 
   final RuntimeConfig config;
@@ -55,6 +57,12 @@ class DebugDrawer extends StatefulWidget {
   /// 只为测试注入。生产路径上现造一个——它没有状态，`UpdateService` 的
   /// 全部状态都在 `RuntimeConfig` 里。
   final UpdateService? updateService;
+
+  /// 显不显示调试项，默认跟着构建模式走（[kShowDebugSettings]）。
+  ///
+  /// 之所以还留一个参数：widget 测试永远跑在 debug 模式下，那个 const 在
+  /// 测试里恒为 true，不显式传 false 就没法覆盖正式包那条路径。
+  final bool showDebugItems;
 
   @override
   State<DebugDrawer> createState() => _DebugDrawerState();
@@ -189,59 +197,71 @@ class _DebugDrawerState extends State<DebugDrawer> {
     // 和 index.json 用的都是 id。id 本身（`hide-ads`）也正好是可读的标题。
     final scripts = _config.buildTime.injectScripts.map(scriptIdFor).toList();
     final enabled = _config.enabledScripts;
+    final debug = widget.showDebugItems;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: [
-          ListTile(
-            title: const Text('URL'),
-            subtitle: Text(_config.url),
-            trailing: const Icon(Icons.edit),
-            onTap: _editUrl,
-          ),
-          ListTile(
-            title: const Text('User agent'),
-            subtitle: Text(
-              _config.userAgent.isEmpty ? 'System default' : _config.userAgent,
+          if (debug) ...[
+            ListTile(
+              title: const Text('URL'),
+              subtitle: Text(_config.url),
+              trailing: const Icon(Icons.edit),
+              onTap: _editUrl,
             ),
-            trailing: const Icon(Icons.edit),
-            onTap: _editUserAgent,
-          ),
-          const Divider(),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
-            child: Text('Inject scripts'),
-          ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Text(
-              'Toggling a script reloads the page — scripts only take effect '
-              'on the next page load.',
-              style: TextStyle(fontSize: 12),
+            ListTile(
+              title: const Text('User agent'),
+              subtitle: Text(
+                _config.userAgent.isEmpty
+                    ? 'System default'
+                    : _config.userAgent,
+              ),
+              trailing: const Icon(Icons.edit),
+              onTap: _editUserAgent,
             ),
-          ),
-          for (final id in scripts)
+            const Divider(),
+          ],
+          // 一个脚本都没打包进来时整组不出现——只剩标题和「toggling a script
+          // reloads the page」的说明、底下一个开关都没有，是在讲一件这个 app
+          // 里不存在的事。正式包里它还正好落在页面顶部。
+          if (scripts.isNotEmpty) ...[
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+              child: Text('Inject scripts'),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                'Toggling a script reloads the page — scripts only take '
+                'effect on the next page load.',
+                style: TextStyle(fontSize: 12),
+              ),
+            ),
+            for (final id in scripts)
+              SwitchListTile(
+                key: ValueKey('script:$id'),
+                title: Text(id),
+                value: enabled.contains(id),
+                onChanged: (on) => _toggleScript(id, on),
+              ),
+            const Divider(),
+          ],
+          if (debug) ...[
             SwitchListTile(
-              key: ValueKey('script:$id'),
-              title: Text(id),
-              value: enabled.contains(id),
-              onChanged: (on) => _toggleScript(id, on),
+              title: const Text('Capture network'),
+              subtitle: const Text(
+                'Hooks the page\'s fetch and XHR to fill the requests list.',
+              ),
+              value: _config.captureNetwork,
+              onChanged: (on) {
+                _config.captureNetwork = on;
+                setState(() {});
+                widget.onReloadRequested();
+              },
             ),
-          const Divider(),
-          SwitchListTile(
-            title: const Text('Capture network'),
-            subtitle: const Text(
-              'Hooks the page\'s fetch and XHR to fill the requests list.',
-            ),
-            value: _config.captureNetwork,
-            onChanged: (on) {
-              _config.captureNetwork = on;
-              setState(() {});
-              widget.onReloadRequested();
-            },
-          ),
-          const Divider(),
+            const Divider(),
+          ],
           SwitchListTile(
             key: const ValueKey('appLock'),
             title: const Text('App lock'),
@@ -302,30 +322,32 @@ class _DebugDrawerState extends State<DebugDrawer> {
               widget.onReloadRequested();
             },
           ),
-          ListTile(
-            title: const Text('View logs'),
-            leading: const Icon(Icons.article),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => LogPage(logsDir: widget.logsDir),
+          if (debug) ...[
+            ListTile(
+              title: const Text('View logs'),
+              leading: const Icon(Icons.article),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => LogPage(logsDir: widget.logsDir),
+                ),
               ),
             ),
-          ),
-          ListTile(
-            title: const Text('View requests'),
-            leading: const Icon(Icons.swap_vert),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => NetLogPage(log: widget.netLog),
+            ListTile(
+              title: const Text('View requests'),
+              leading: const Icon(Icons.swap_vert),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => NetLogPage(log: widget.netLog),
+                ),
               ),
             ),
-          ),
-          const Divider(),
-          ListTile(
-            title: const Text('Reset to build defaults'),
-            leading: const Icon(Icons.restart_alt),
-            onTap: _reset,
-          ),
+            const Divider(),
+            ListTile(
+              title: const Text('Reset to build defaults'),
+              leading: const Icon(Icons.restart_alt),
+              onTap: _reset,
+            ),
+          ],
         ],
       ),
     );

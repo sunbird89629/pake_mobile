@@ -14,10 +14,6 @@
   现在链接点击基本不管，外链直接跑出壳。config 加 `safeDomains` 字段 + 拦截逻辑：
   站内壳内开、外域丢系统浏览器。对 4kvm 这种外链多的站是实打实的体验提升。
 
-- **正式环境隐藏不必要的设置项**
-  Debug/开发调试用的设置项（如 User-Agent 切换、清缓存、Debug Drawer 等）对普通用户无意义且容易造成困惑。
-  通过 `flavor` 或环境变量区分，仅在 debug 构建中展示这些选项。
-
 - **为预设 App 添加视频和图片介绍**
   图片和视频能最快传达 App 的功能和特点，比文字更直观。
   为每个预设 App 配置封面图和介绍视频 URL（或本地路径），在 App 详情页或应用市场页面展示。
@@ -30,6 +26,14 @@
 
 - **页内查找**
   `flutter_inappwebview` 自带 `findAll()` / `findNext()`，底部栏加入口就行。长文站点实用。
+
+- **调研 Google 登录的对接**
+  Google 从 2021 年起禁止在嵌入式 WebView 里跑 OAuth，壳里点「用 Google 登录」会直接吃
+  `403 disallowed_useragent`。一批站点（论坛、SaaS）的登录路径因此在壳内是死的。
+  调研两条路：(1) 把授权页丢给系统浏览器 / Android Custom Tabs（`flutter_web_auth_2` 或
+  `url_launcher`），回调走 deep link——难点是 Custom Tabs 和 WebView 在 Android 上**不共享
+  cookie**，登录态怎么回灌进 WebView 是关键；(2) 改 UA 伪装成 Chrome，成本低但 Google 有检测，
+  未必稳。先做可行性验证，再决定要不要做。
 
 ## 以后
 

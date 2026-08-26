@@ -57,11 +57,16 @@ List<String> flutterBuildArgs(
   PakePlatform platform,
   PakeConfig config, {
   String? exportOptionsPath,
+  bool debugUi = false,
 }) {
   final common = [
     '--release',
     '--build-name=${config.version}',
     '--build-number=${config.versionCode}',
+    // 设置页的调试项默认只在 debug 构建里出现（见 pake_shell 的
+    // `kShowDebugSettings`）。这一条是给正式包开的后门，`pakem build
+    // --debug-ui` 才加。
+    if (debugUi) '--dart-define=PAKE_DEBUG_UI=true',
   ];
 
   return switch (platform) {
@@ -87,6 +92,7 @@ Future<List<String>> runBuild({
   required ProcessRunner runner,
   required Output output,
   String? exportOptionsPath,
+  bool debugUi = false,
 }) async {
   final artifacts = <String>[];
   // Workspace is a single persistent project reused across different apps
@@ -102,6 +108,7 @@ Future<List<String>> runBuild({
       platform,
       config,
       exportOptionsPath: exportOptionsPath,
+      debugUi: debugUi,
     );
     final result = await runner.run(
       'flutter',
