@@ -155,3 +155,42 @@ debug key，而那个 key 每次构建都不一样。后果不是装不上，是
 
 构建耗时用的是实测值（`gh run list` 看 build-presets 近六次，都是 4~5 分钟），
 冷缓存那次没有数据就只说「明显更久」，不编数字。
+
+## 图标自动发现猜错一次，整个构建失败
+
+在线构建上线后第一次真实使用（`https://www.x.com`）就挂了：
+
+```
+{"ok":false,"error":{"message":"Could not decode the icon; expected a PNG, JPEG or WebP image."}}
+```
+
+用户根本没指定图标。探针跑出来的真相：
+
+```
+discovered: https://www.x.com/apple-touch-icon.png
+bytes: 287546
+head ascii: <!DOCTYPE html><html dir="ltr" l
+```
+
+**x.com 对不存在的路径返回 200 + 首页 HTML，不是 404**——SPA 的 catch-all
+路由，很常见。`fetchIconBytes` 只看状态码，把 287KB 的 HTML 当图标交了下去。
+
+真正的缺陷在 `build.dart`：那个 try 只包了**下载**，解码发生在后面的
+`materializeConfig` → `writeAndroidIcons` → `_decode`，已经在 try 之外。
+所以走的不是 catch 里写着的 `using default`，而是整个构建失败。自动发现
+本来就是猜，猜错该回落默认——这是意图和实现对不上，不是新引入的 bug，
+只是在线构建把它推到了普通用户面前。
+
+修法是把「能不能解码」纳入自动发现的容错范围（新增 `canDecodeIcon`），
+显式 `--icon` 那条路仍然直接抛错——用户指定的东西静默换掉才是掩盖问题。
+
+### 测试顺带挖出第二个缺陷
+
+给 `canDecodeIcon` 写「空字节返回 false」时它没返回 false，而是抛了
+`RangeError`：`decodeImage` 探测 magic number 时直接越界，不是返回 null。
+原来的 `_decode` 也一样——显式给一个 0 字节文件，用户看到的是解码器内部的
+类型错误而不是「这不是一张图」。抽了个 `_tryDecode` 兜住，两条路都走它。
+
+验证没有停在测试上：本地重跑了失败的那条命令，
+`Discovered icon is not a usable image, using default.` → 三个 APK 全部出包。
+同一次运行还顺带确认了新加的 `version` 字段在真实构建里是 `1.0.0`（CLI 默认值）。

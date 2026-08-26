@@ -13,7 +13,7 @@ import '../patch/ios.dart';
 import '../process_runner.dart';
 import '../signing.dart';
 import '../workspace.dart';
-import 'icon.dart' show fetchIconBytes;
+import 'icon.dart' show canDecodeIcon, fetchIconBytes;
 
 class BuildCommand extends Command<int> {
   BuildCommand(
@@ -111,9 +111,18 @@ class BuildCommand extends Command<int> {
         _output.info('Icon: $discovered');
         try {
           final bytes = await fetchIconBytes(discovered);
-          final tmp = File(p.join(_workspace.root, '.icon-auto.png'));
-          tmp.writeAsBytesSync(bytes);
-          resolvedConfig = config.copyWith(iconPath: tmp.path);
+          // 下载成功 ≠ 拿到了图片：SPA 站点常对不存在的路径返回 200 + 首页
+          // HTML。不在这里挡住的话，解码要到 materializeConfig 里才炸，而那
+          // 已经在 try 之外——自动发现猜错一次，代价是整个构建失败。
+          if (!canDecodeIcon(bytes)) {
+            _output.info(
+              'Discovered icon is not a usable image, using default.',
+            );
+          } else {
+            final tmp = File(p.join(_workspace.root, '.icon-auto.png'));
+            tmp.writeAsBytesSync(bytes);
+            resolvedConfig = config.copyWith(iconPath: tmp.path);
+          }
         } catch (e) {
           _output.info('Icon download failed ($e), using default.');
         }
