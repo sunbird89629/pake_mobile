@@ -2,29 +2,10 @@
 
 把任意网页打包成 Android / iOS App。一套 Dart 代码出双端。
 
-## 用法
-
-```bash
-dart pub global activate --source path packages/pake_cli
-
-pakem init                                    # 生成 pake.json 模板
-pakem build https://m.weibo.cn --name Weibo --bundle-id com.pake.weibo
-pakem build https://m.weibo.cn --platform android,ios --team-id ABCDE12345 --profile "Pake Dev"
-pakem icon https://m.weibo.cn/favicon.ico     # build 不给 --icon 时也会自动找
-pakem release                                 # 把归档产物发成 GitHub Release
-pakem doctor
-```
-
-产物归档在 `~/.pake/out/<app>/`，构建日志在 `~/.pake/logs/`。
-
-workspace 是跨 app 复用的单一 Flutter 项目，`~/.pake/workspace/build/` 里那份
-会被下一次构建原地覆盖——`pakem build` 报出来的、也是该拿去装的，是
-`~/.pake/out/<app>/` 里的归档副本。
-
 ## 在线构建（不用装任何东西）
 
-本地要跑 `pakem` 得先有 Flutter SDK + Android SDK + JDK，这不是随手就能凑齐的
-一套。想打一个包而已的话走 GitHub Actions：
+现阶段，要在本地要跑 `pakem` 得先有 Flutter SDK + Android SDK + JDK，这不是随手就能凑齐的
+一套。推荐走 GitHub Actions：
 
 1. **[Fork 这个仓库](https://github.com/sunbird89629/pake_mobile/fork)**
    ——`workflow_dispatch` 要仓库的写权限，在别人的仓库里你看不到
