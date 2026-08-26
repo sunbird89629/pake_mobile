@@ -3,10 +3,8 @@
 想做但还没做的功能点。**只记「做什么 + 为什么值得做 + 怎么做」，不填日期、不排 P0/P1**——
 排期一旦写下就开始腐化，而理由不会。
 
-一条做完了就删掉（git 历史里有），并在 `docs/develop_log.md` 记一笔落地过程；
+一条做完了就挪到 "已完成"，并在 `docs/develop_log.md` 记一笔落地过程；
 想清楚不做了就挪到「不做」，写明理由，免得下次再讨论一遍。
-
-来源：`docs/develop_log.md` 的 Pake 功能分析（2026-08-19）。
 
 ## 近期
 
@@ -78,3 +76,10 @@
   改动频率根本撑不起那套机制。版本号策略见 [`versioning.md`](./versioning.md)。
 
 - **无痕模式**：已有 App Lock（防设备他人窥屏）和 Clear cache（一键清空 cookie/存储），不持久化需求可由这两者组合满足。而且 Pake 是单网址打包，不是通用浏览器，「无痕」是浏览器语义，套到单站 App 上反而会让用户困惑。
+
+## 已完成
+
+- **正式环境隐藏不必要的设置项**（2026-08-26）
+  URL、User agent、Capture network、View logs、View requests、Reset to build defaults
+  只在 debug 构建里显示，开关是 `kShowDebugSettings`；正式包的逃生口是
+  `pakem build --debug-ui`。落地过程见 [`develop_log.md`](./develop_log.md)。
