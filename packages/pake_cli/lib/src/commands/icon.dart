@@ -83,16 +83,26 @@ img.Image _decode(List<int> bytes) {
   return decoded;
 }
 
-/// 这堆字节能不能当图标用。
+/// 这堆字节解出来是多大的图（取短边），解不了返回 null。
 ///
-/// 给**自动发现**那条路用的：下载成功不等于拿到了图片。很多 SPA 站点对不
-/// 存在的路径返回 200 + 首页 HTML 而不是 404（`x.com/apple-touch-icon.png`
-/// 就是这样，287KB 的 `<!DOCTYPE html>`），`fetchIconBytes` 只看状态码，
-/// 看不出问题。猜错的图标应该回落到默认图标，而不是让整个构建失败。
+/// 给**自动发现**那条路用的，回答两个问题：
+///
+/// 一、这到底是不是图片。下载成功不等于拿到了图片：很多 SPA 站点对不存在的
+/// 路径返回 200 + 首页 HTML 而不是 404（`x.com/apple-touch-icon.png` 就是
+/// 这样，287KB 的 `<!DOCTYPE html>`），`fetchIconBytes` 只看状态码，看不出
+/// 问题。猜错的图标该回落默认，而不是让整个构建失败。
+///
+/// 二、够不够大。能解码不等于够用——x.com 的 `favicon.ico` 只有 32×32，
+/// 拉到 xxxhdpi 的 192×192 会糊，而同一条候选队列里就躺着 512×512 的那张。
 ///
 /// 显式 `--icon` 那条路仍然走 [_decode] 直接抛错——那是用户指定的，
 /// 静默换成默认图标反而是掩盖问题。
-bool canDecodeIcon(List<int> bytes) => _tryDecode(bytes) != null;
+int? decodedIconSize(List<int> bytes) {
+  final image = _tryDecode(bytes);
+  if (image == null) return null;
+  // 取短边：非正方形的图缩放后会被裁，短边才是实际可用的分辨率。
+  return image.width < image.height ? image.width : image.height;
+}
 
 void writeAndroidIcons({
   required List<int> pngBytes,

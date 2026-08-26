@@ -194,3 +194,45 @@ head ascii: <!DOCTYPE html><html dir="ltr" l
 验证没有停在测试上：本地重跑了失败的那条命令，
 `Discovered icon is not a usable image, using default.` → 三个 APK 全部出包。
 同一次运行还顺带确认了新加的 `version` 字段在真实构建里是 `1.0.0`（CLI 默认值）。
+
+## 图标自动发现的成功率：三个叠在一起的坑
+
+加完 `icon` 字段后顺手探了四个站点，结果一半拿不到图标——而且每个失败的
+原因都不一样：
+
+| 站点 | 发现的 URL | 结果 |
+|---|---|---|
+| github.com | `favicon.svg` | SVG，`package:image` 解不了 |
+| x.com | `apple-touch-icon.png` | 200 + 287KB 首页 HTML |
+| m.weibo.cn | Google favicon 保底 | ✅ PNG |
+| youtube.com | `favicon_144x144.png` | ✅ PNG |
+
+**一、排序逻辑在自伤。** `icon_discovery.dart` 的注释白纸黑字写着「SVG
+（`sizes="any"`）维度给 999，在一切非 SVG 之上」——把 SVG 排在最优先，
+而下游解不了 SVG。写这行时大概想着矢量图更清晰，没料到解码器不支持。
+后果是 GitHub、GitLab 这类挂 SVG favicon 的站点**必然**拿不到图标。
+把 `IconTier.svg` 从 order 0 挪到 7（垫底），不删掉是因为真有站点只提供
+SVG 时它仍是唯一候选，留着至少能让日志说清「试过了、解不了」。
+
+**二、只赌一个候选没有第二次机会。** 评分是猜的，猜错就回落默认，而队列里
+往往还躺着能用的。`discoverIconUrl` 改成 `discoverIconUrls` 返回排序后的
+全部候选（`rankedUrls`，去重），build 里逐个试，上限 3 次——每次尝试都是
+一趟真实网络请求，墙内每趟都要等超时。
+
+**三、能解码不等于够用。** 修完前两条后 x.com 拿到的是 `favicon.ico`——
+32×32，拉到 xxxhdpi 的 192 会糊，而同一条队列再往后一个就是 512×512。
+所以判断从「能不能解码」升级成「解出来多大」（`canDecodeIcon` →
+`decodedIconSize`，取短边），够 192 就停，不够就继续找更大的。
+
+三条都修完，x.com 的日志变成：
+
+```
+Icon: https://www.x.com/apple-touch-icon.png
+  not a usable image, trying the next candidate.
+Icon: https://www.x.com/favicon.ico
+  only 32px, looking for something larger.
+Icon: https://abs.twimg.com/.../icon-default-large.png
+```
+
+验证到了 APK 里：解包读 launcher icon，确认是 X 的 logo 而不是默认地球仪。
+GitHub 那边第一候选直接变成 512×512 的 PNG。

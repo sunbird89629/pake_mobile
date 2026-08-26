@@ -5,7 +5,10 @@ const baseUri = 'https://example.com/page';
 
 void main() {
   group('parseLinkIcons', () {
-    test('prefers SVG over any PNG regardless of size', () {
+    // SVG 曾经排在最前（矢量、缩放无损），但 `package:image` 解不了它——
+    // GitHub 这类只挂 SVG favicon 的站点因此必然拿不到图标，回落默认。
+    // 现在它垫底：能解码的格式优先，SVG 只在别无选择时才轮到。
+    test('ranks SVG below every decodable format', () {
       final candidates = parseLinkIcons(Uri.parse(baseUri), '''
 <html><head>
 <link rel="icon" type="image/svg+xml" href="/icon.svg">
@@ -15,8 +18,10 @@ void main() {
 ''');
 
       final best = bestOf(candidates)!;
-      expect(best.url, endsWith('/icon.svg'));
-      expect(best.tier, IconTier.svg);
+      expect(best.url, endsWith('/apple.png'));
+
+      // 但它仍然是候选队列的一员，只是排在最后。
+      expect(rankedUrls(candidates).last, endsWith('/icon.svg'));
     });
 
     test('apple-touch-icon beats any non-SVG icon', () {
@@ -53,9 +58,12 @@ void main() {
 </head></html>
 ''');
 
-      final best = bestOf(candidates)!;
-      expect(best.url, endsWith('/icon.svg'));
-      expect(best.tier, IconTier.svg);
+      // 认得出它是 SVG——这正是把它排到最后所依赖的判断。
+      final svg = candidates.firstWhere((c) => c.url.endsWith('/icon.svg'));
+      expect(svg.tier, IconTier.svg);
+
+      // 认出来的后果是让位，不是优先。
+      expect(bestOf(candidates)!.url, endsWith('/huge.png'));
     });
 
     test('resolves relative URLs against page URI', () {
@@ -88,8 +96,8 @@ void main() {
 ''');
 
       final best = bestOf(candidates)!;
-      // regular icon (tier 3, 16px) = -3000 + 16 = -2984
-      // shortcut icon (tier 4, 256px) = -4000 + 256 = -3744
+      // regular icon (tier 2, 16px) = -2000 + 16 = -1984
+      // shortcut icon (tier 3, 256px) = -3000 + 256 = -2744
       // regular icon wins despite smaller size
       expect(best.url, endsWith('/icon.png'));
     });
@@ -120,15 +128,16 @@ void main() {
 </head></html>
 ''');
 
-      // multi: 48px → -3000 + 48 = -2952
-      // single: 64px → -3000 + 64 = -2936  ← higher
+      // multi: 48px → -2000 + 48 = -1952
+      // single: 64px → -2000 + 64 = -1936  ← higher
       final best = bestOf(candidates)!;
       expect(best.url, endsWith('/single.png'));
     });
 
-    test('sizes="any" (SVG) beats all fixed dimensions', () {
-      // This needs an SVG type to get the svg tier — "any" alone doesn't
-      // auto-promote.
+    // `sizes="any"` 给 999 的维度加成，但加成只在同 tier 内起作用——
+    // tier 之间差 1000 分，999 跨不过去。SVG 垫底之后这个加成再也翻不了盘，
+    // 留着它是为了让多个 SVG 之间仍有个排序。
+    test('the "any" dimension bonus cannot lift SVG over another tier', () {
       final candidates = parseLinkIcons(Uri.parse(baseUri), '''
 <html><head>
 <link rel="icon" type="image/svg+xml" href="/icon.svg">
@@ -137,7 +146,45 @@ void main() {
 ''');
 
       final best = bestOf(candidates)!;
-      expect(best.url, endsWith('/icon.svg'));
+      expect(best.url, endsWith('/apple.png'));
+    });
+  });
+
+  // 只返回「最佳」的那一个是不够的：评分是猜的，而猜错没有第二次机会。
+  // 后缀会骗人（x.com 的 apple-touch-icon.png 返回 287KB 首页 HTML），
+  // 格式也未必解得了。调用方要拿到整条队列，一个个试到能用为止。
+  group('rankedUrls', () {
+    test('orders every candidate best-first, not just the winner', () {
+      final candidates = parseLinkIcons(Uri.parse(baseUri), '''
+<html><head>
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="shortcut icon" sizes="256x256" href="/shortcut.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple.png">
+<link rel="icon" sizes="512x512" href="/huge.png">
+</head></html>
+''');
+
+      expect(rankedUrls(candidates), [
+        'https://example.com/apple.png', // appleTouch
+        'https://example.com/huge.png', // iconLarge
+        'https://example.com/shortcut.png', // shortcutIcon
+        'https://example.com/icon.svg', // svg，垫底
+      ]);
+    });
+
+    test('drops duplicate urls so the same fetch is not retried', () {
+      final candidates = parseLinkIcons(Uri.parse(baseUri), '''
+<html><head>
+<link rel="apple-touch-icon" sizes="180x180" href="/same.png">
+<link rel="icon" sizes="32x32" href="/same.png">
+</head></html>
+''');
+
+      expect(rankedUrls(candidates), ['https://example.com/same.png']);
+    });
+
+    test('is empty for no candidates', () {
+      expect(rankedUrls(const []), isEmpty);
     });
   });
 

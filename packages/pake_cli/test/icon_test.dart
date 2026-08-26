@@ -24,19 +24,28 @@ void main() {
   // `/apple-touch-icon.png` 返回 200 + 287KB 的首页 HTML，而不是 404。
   // 这一层挡不住的话，解码要到 materializeConfig 里才炸，那时已经出了
   // build 命令里那个 try——自动发现猜错一次，整个构建就失败。
-  group('canDecodeIcon', () {
+  group('decodedIconSize', () {
     test('rejects the HTML an SPA serves in place of a 404', () {
       final html =
           '<!DOCTYPE html><html dir="ltr" lang="en"><body></body></html>';
-      expect(canDecodeIcon(html.codeUnits), isFalse);
-    });
-
-    test('accepts a real png', () {
-      expect(canDecodeIcon(_png(512)), isTrue);
+      expect(decodedIconSize(html.codeUnits), isNull);
     });
 
     test('rejects empty bytes', () {
-      expect(canDecodeIcon(const []), isFalse);
+      expect(decodedIconSize(const []), isNull);
+    });
+
+    // 尺寸不只是「是不是图」的副产品：能解码不等于够用。x.com 的
+    // favicon.ico 只有 32×32，拉到 xxxhdpi 的 192 会糊，而同一条候选队列里
+    // 就躺着 512×512 那张——调用方要靠这个数字挑，不能拿到就用。
+    test('reports the size so the caller can prefer a larger candidate', () {
+      expect(decodedIconSize(_png(512)), 512);
+      expect(decodedIconSize(_png(32)), 32);
+    });
+
+    test('reports the short edge, which is what survives a square crop', () {
+      final wide = img.encodePng(img.Image(width: 512, height: 64));
+      expect(decodedIconSize(wide), 64);
     });
   });
 

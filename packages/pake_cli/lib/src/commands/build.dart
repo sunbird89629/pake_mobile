@@ -13,7 +13,21 @@ import '../patch/ios.dart';
 import '../process_runner.dart';
 import '../signing.dart';
 import '../workspace.dart';
-import 'icon.dart' show canDecodeIcon, fetchIconBytes;
+import 'icon.dart' show decodedIconSize, fetchIconBytes;
+
+/// 最多下载几个图标候选。
+///
+/// 候选队列末尾是 Google favicon 那种保底项，一路试到底意义不大，而每次
+/// 尝试都是一趟真实网络请求——墙内每趟都要等超时。三次足够跨过「SVG 解不了」
+/// 和「后缀骗人」这两种常见情况。
+const _maxIconAttempts = 3;
+
+/// 到这个尺寸就不再往下找了。
+///
+/// 192 是 `androidIconSizes` 里最大的那档（xxxhdpi），拿到它就不需要放大。
+/// 没有这道门槛的话「第一个能解码的」会赢——x.com 那条队列里它是 32×32 的
+/// favicon.ico，而再往后一个是 512×512。
+const _goodEnoughIconSize = 192;
 
 class BuildCommand extends Command<int> {
   BuildCommand(
@@ -110,29 +124,50 @@ class BuildCommand extends Command<int> {
     // 下载失败、还是抓到的根本不是图片。
     var iconSource = config.iconPath ?? 'default';
     if (config.iconPath == null) {
-      final discovered = await discoverIconUrl(config.url);
-      if (discovered != null) {
-        _output.info('Icon: $discovered');
+      // 评分排第一的未必能用：后缀会骗人（`x.com/apple-touch-icon.png` 返回
+      // 287KB 的首页 HTML），格式也未必解得了。逐个试到解得开为止——只赌
+      // 第一个的话，站点明明还有能用的图标也拿不到。
+      final candidates = await discoverIconUrls(config.url);
+
+      List<int>? bestBytes;
+      var bestSize = 0;
+
+      for (final candidate in candidates.take(_maxIconAttempts)) {
+        _output.info('Icon: $candidate');
         try {
-          final bytes = await fetchIconBytes(discovered);
-          // 下载成功 ≠ 拿到了图片：SPA 站点常对不存在的路径返回 200 + 首页
-          // HTML。不在这里挡住的话，解码要到 materializeConfig 里才炸，而那
-          // 已经在 try 之外——自动发现猜错一次，代价是整个构建失败。
-          if (!canDecodeIcon(bytes)) {
-            _output.info(
-              'Discovered icon is not a usable image, using default.',
-            );
-          } else {
-            final tmp = File(p.join(_workspace.root, '.icon-auto.png'));
-            tmp.writeAsBytesSync(bytes);
-            resolvedConfig = config.copyWith(iconPath: tmp.path);
+          final bytes = await fetchIconBytes(candidate);
+          // 下载成功 ≠ 拿到了图片。不在这里挡住的话，解码要到
+          // materializeConfig 里才炸，而那已经在这个 try 之外——自动发现
+          // 猜错一次，代价是整个构建失败。
+          final size = decodedIconSize(bytes);
+          if (size == null) {
+            _output.info('  not a usable image, trying the next candidate.');
+            continue;
+          }
+
+          if (size > bestSize) {
+            bestBytes = bytes;
+            bestSize = size;
             // 记发现它的 URL，不是那个临时文件路径——`.icon-auto.png` 对
             // 读结果的人没有任何意义。
-            iconSource = discovered;
+            iconSource = candidate;
           }
+
+          // 够大就不必再下了。不够大也不能立刻收工：x.com 的第二候选是
+          // 32×32 的 favicon.ico，而第三个才是 512×512 那张。
+          if (bestSize >= _goodEnoughIconSize) break;
+          _output.info('  only ${size}px, looking for something larger.');
         } catch (e) {
-          _output.info('Icon download failed ($e), using default.');
+          _output.info('  download failed ($e), trying the next candidate.');
         }
+      }
+
+      if (bestBytes == null) {
+        _output.info('No usable icon found, using the default one.');
+      } else {
+        final tmp = File(p.join(_workspace.root, '.icon-auto.png'));
+        tmp.writeAsBytesSync(bestBytes);
+        resolvedConfig = config.copyWith(iconPath: tmp.path);
       }
     }
 

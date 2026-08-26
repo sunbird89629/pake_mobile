@@ -8,31 +8,35 @@ import 'package:http/http.dart' as http;
 /// `score` 用 `-(tier.order * 1000) + clampedDimension`，同 tier 内按
 /// 尺寸排序。调用方只需要 `best.score`——这个 enum 起文档作用。
 enum IconTier {
-  /// SVG：矢量，缩放无损。匹配 `type="image/svg+xml"` 和 URL 以 `.svg`
-  /// 结尾的 `rel="icon"`。
-  svg(0),
-
   /// `<link rel="apple-touch-icon">`，通常 180×180 起。不加尺寸说明
   /// 也至少是 60×60，比 16×16 favicon 强。
-  appleTouch(1),
+  appleTouch(0),
 
   /// `<link rel="icon">` 带显式 sizes ≥144px。
-  iconLarge(2),
+  iconLarge(1),
 
   /// `<link rel="icon">` 带显式 sizes <144px。
-  iconSmall(3),
+  iconSmall(2),
 
   /// `<link rel="shortcut icon">`。
-  shortcutIcon(4),
+  shortcutIcon(3),
 
   /// PWA `manifest.json` 里 `icons[]` 中的条目。
-  manifestIcon(5),
+  manifestIcon(4),
 
   /// `/favicon.ico`。
-  faviconIco(6),
+  faviconIco(5),
 
   /// Google S2 favicon 服务：`google.com/s2/favicons?domain=X&sz=256`。
-  googleFavicon(7);
+  googleFavicon(6),
+
+  /// SVG：矢量、缩放无损——**但 `package:image` 解不了它**，拿到了也只能
+  /// 丢掉回落默认图标。这一层原本排在最前（`sizes="any"` 还额外加 999 分），
+  /// 结果是 GitHub 这类用 SVG favicon 的站点**必然**拿不到图标。
+  ///
+  /// 排到最末而不是直接删掉：真有站点只提供 SVG 时，它仍然是唯一候选，
+  /// 留着至少能让日志说清「试过了、解不了」。
+  svg(7);
 
   const IconTier(this.order);
   final int order;
@@ -173,10 +177,16 @@ IconCandidate googleFaviconFor(String domain) => _candidate(
 // 主入口
 // ===========================================================================
 
-/// 按 A→B→C→D→E 优先级链发现图标 URL，返回评分最高的，或 null。
+/// 按 A→B→C→D→E 优先级链发现图标候选，按评分从高到低返回**全部**。
+///
+/// 返回列表而不是单个「最佳」：评分只是猜测，而下载回来才知道那东西到底
+/// 能不能用。调用方逐个试到解得开为止——见 [rankedUrls]。
 ///
 /// 调用方负责 A（用户显式 `--icon`）——在外部跳过。
-Future<String?> discoverIconUrl(String siteUrl, {http.Client? client}) async {
+Future<List<String>> discoverIconUrls(
+  String siteUrl, {
+  http.Client? client,
+}) async {
   final c = client ?? http.Client();
   final pageUri = Uri.parse(siteUrl);
 
@@ -209,7 +219,7 @@ Future<String?> discoverIconUrl(String siteUrl, {http.Client? client}) async {
     // E: Google favicon（永远作为保底）
     candidates.add(googleFaviconFor(pageUri.host));
 
-    return bestOf(candidates)?.url;
+    return rankedUrls(candidates);
   } finally {
     if (client == null) c.close();
   }
@@ -223,6 +233,21 @@ IconCandidate? bestOf(List<IconCandidate> candidates) {
     if (c.score > best.score) best = c;
   }
   return best;
+}
+
+/// 全部候选按评分从高到低，去重。
+///
+/// 只返回最优的那一个是不够的：评分是**猜**的，而猜错没有第二次机会。
+/// 后缀会骗人（`x.com/apple-touch-icon.png` 返回的是 287KB 首页 HTML），
+/// 格式也未必解得了。调用方拿到整条队列，可以一个个试到能用为止。
+List<String> rankedUrls(List<IconCandidate> candidates) {
+  final sorted = [...candidates]..sort((a, b) => b.score.compareTo(a.score));
+
+  final seen = <String>{};
+  return [
+    for (final c in sorted)
+      if (seen.add(c.url)) c.url,
+  ];
 }
 
 // ===========================================================================
