@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../build_pipeline.dart';
 import '../icon_discovery.dart';
+import '../icon_generator.dart';
 import '../materialize.dart';
 import '../output.dart';
 import '../patch/ios.dart';
@@ -170,7 +171,27 @@ class BuildCommand extends Command<int> {
       }
 
       if (bestBytes == null) {
-        _output.info('No usable icon found, using the default one.');
+        // 站点一张能用的都没有。模板里那个默认地球仪装一屏就分不出谁是谁，
+        // 按 app 名生成一个至少颜色和字母跟着 app 走。生成本身再炸了才回落
+        // 到地球仪——它是最后一道保底，不是常规路径。
+        try {
+          final generated = generateIcon(
+            name: config.name,
+            bundleId: config.bundleId,
+          );
+          final tmp = File(p.join(_workspace.root, '.icon-generated.png'))
+            ..writeAsBytesSync(generated);
+          resolvedConfig = config.copyWith(iconPath: tmp.path);
+          iconSource = 'generated';
+          _output.info(
+            'No usable icon found; generated one from the app name.',
+          );
+        } catch (e) {
+          _output.info(
+            'No usable icon found and generating one failed ($e); '
+            'using the default.',
+          );
+        }
       } else {
         final tmp = File(p.join(_workspace.root, '.icon-auto.png'));
         tmp.writeAsBytesSync(bestBytes);

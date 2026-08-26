@@ -159,11 +159,14 @@ jobs:
           if [ "$SIGNING" != release ]; then
             WARNING='⚠️ Signed with a throwaway debug key — this APK cannot be installed over any other build.'
           fi
-          if [ "$ICON_SOURCE" = default ]; then
-            ICON_LINE='**Icon:** default (nothing usable found on the site)'
-          else
-            ICON_LINE="**Icon:** $ICON_SOURCE"
-          fi
+          case "$ICON_SOURCE" in
+            default)
+              ICON_LINE='**Icon:** default (generating one from the app name also failed)' ;;
+            generated)
+              ICON_LINE='**Icon:** generated from the app name (the site offered nothing usable)' ;;
+            *)
+              ICON_LINE="**Icon:** $ICON_SOURCE" ;;
+          esac
           gh release create "$TAG" \
             artifacts/app-*.apk \
             --title "$APP $VERSION" \
