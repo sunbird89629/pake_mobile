@@ -236,3 +236,39 @@ Icon: https://abs.twimg.com/.../icon-default-large.png
 
 验证到了 APK 里：解包读 launcher icon，确认是 X 的 logo 而不是默认地球仪。
 GitHub 那边第一候选直接变成 512×512 的 PNG。
+
+## 补上碰网络那三个函数的测试，捞出一个 Uri.replace 陷阱
+
+`icon_discovery.dart` 原本 14 个用例全是纯函数——`parseLinkIcons`、评分、
+`rankedUrls`、`googleFaviconFor`。三个碰网络的
+（`parseManifestIcons` / `tryFaviconIco` / `discoverIconUrls`）一个都没测，
+而它们签名里都留着 `http.Client?`：那个注入口当初就是为可测加的，测试一直
+没写。`discoverIconUrls` 还是刚被改过签名的主入口，改完毫无保护。
+
+用 `package:http/testing.dart` 的 `MockClient` 补齐 8 个用例后，
+`tryFaviconIco` 立刻红了：
+
+```
+Expected: https://example.com/favicon.ico
+Actual:   https://example.com/favicon.ico?x=1#frag
+```
+
+**`Uri.replace` 的 `null` 是「保持原样」，不是「清空」。** 所以那句
+`pageUri.replace(path: '/favicon.ico', query: null, fragment: null)` 里的后
+两个参数**什么也没做**，从带查询串的页面构建出来的 favicon URL 会拖着页面
+自己的 query 和 fragment。改成直接 `Uri(...)` 构造。
+
+这个 bug 藏了很久没被发现，正是因为它只在「页面 URL 带 query/fragment」时
+才显形，而手工试的站点首页大多是干净的。
+
+新用例锁住的性质，挑值得说的三条：
+
+- **`discoverIconUrls` 永不返回空**——Google favicon 是无条件追加的保底项，
+  `build.dart` 的候选循环直接遍历这个返回值，空列表意味着连试都不试。
+- **页面抓不到也不炸**——B/C 那层 `catch (_)` 之前没有任何人验证过它真的
+  兜住了，现在有一条「页面请求抛异常，D/E 仍走完」。
+- **manifest 图标确实合进队列**——GitHub 那个 512×512 就是从 manifest 来的，
+  是 SVG 降权后能拿到图标的关键路径。
+
+顺带修了两处被上一轮 tier 重排改成错的注释（`_score` 还写着「SVG 在一切
+非 SVG 之上」）。

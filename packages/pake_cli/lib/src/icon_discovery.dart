@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 /// 图标发现顺序，从高到低优先。
 ///
 /// `score` 用 `-(tier.order * 1000) + clampedDimension`，同 tier 内按
-/// 尺寸排序。调用方只需要 `best.score`——这个 enum 起文档作用。
+/// 尺寸排序。调用方拿的是 [rankedUrls] 排好的整条队列——这个 enum 起文档作用。
 enum IconTier {
   /// `<link rel="apple-touch-icon">`，通常 180×180 起。不加尺寸说明
   /// 也至少是 60×60，比 16×16 favicon 强。
@@ -150,10 +150,14 @@ Future<List<IconCandidate>> parseManifestIcons(
 Future<IconCandidate?> tryFaviconIco(Uri pageUri, {http.Client? client}) async {
   final c = client ?? http.Client();
   try {
-    final url = pageUri.replace(
+    // 重新构造而不是 `pageUri.replace(...)`：`replace` 的 null 表示「保持
+    // 原样」而不是「清空」，所以 `query: null, fragment: null` 什么也不做，
+    // 从 `/page?x=1#frag` 拼出来的是 `/favicon.ico?x=1#frag`。
+    final url = Uri(
+      scheme: pageUri.scheme,
+      host: pageUri.host,
+      port: pageUri.hasPort ? pageUri.port : null,
       path: '/favicon.ico',
-      query: null,
-      fragment: null,
     );
     final response = await c.head(url);
     if (response.statusCode != 200) return null;
@@ -258,7 +262,10 @@ IconCandidate _candidate(Uri url, IconTier tier, String sizes) =>
     IconCandidate(url: url.toString(), score: _score(tier, sizes), tier: tier);
 
 /// `score = -(tier.order * 1000) + clampedDimension`。
-/// SVG（`sizes="any"`）维度给 999，在一切非 SVG 之上。
+///
+/// 维度加成最多 999，而 tier 之间差 1000——**加成永远跨不过 tier 边界**，
+/// 只在同 tier 内决定先后。`sizes="any"`（SVG 惯用）拿满 999 也一样：
+/// 它曾经能把 SVG 顶到最前，那是因为当时 SVG 自己就是 tier 0。
 int _score(IconTier tier, String sizes) {
   final dims = _maxDimension(sizes);
   return -(tier.order * 1000) + dims.clamp(0, 999);
