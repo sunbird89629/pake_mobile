@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:pake_config/pake_config.dart';
 
 import 'debug_ui.dart';
-import 'lock/pattern_dialog.dart';
+import 'lock/pattern_page.dart';
 import 'log_page.dart';
 import 'net/net_log.dart';
 import 'net/net_log_page.dart';
@@ -125,7 +125,7 @@ class _DebugDrawerState extends State<DebugDrawer> {
 
   /// 取消对话框就什么都不写——开关下一次 build 读回 false，自己弹回去。
   Future<void> _enableAppLock() async {
-    final hash = await showPatternDialog(context);
+    final hash = await showPatternPage(context);
     if (hash == null) return;
 
     _config
@@ -143,7 +143,7 @@ class _DebugDrawerState extends State<DebugDrawer> {
   }
 
   Future<void> _changePattern() async {
-    final hash = await showPatternDialog(context);
+    final hash = await showPatternPage(context);
     if (hash == null) return;
 
     _config.patternHash = hash;

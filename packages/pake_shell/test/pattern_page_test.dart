@@ -1,7 +1,8 @@
+import 'package:better_pattern_lock/better_pattern_lock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pake_shell/src/lock/pattern_code.dart';
-import 'package:pake_shell/src/lock/pattern_dialog.dart';
+import 'package:pake_shell/src/lock/pattern_page.dart';
 
 import 'support/draw_pattern.dart';
 
@@ -28,7 +29,7 @@ void main() {
         home: Builder(
           builder: (context) => TextButton(
             onPressed: () async {
-              result = await showPatternDialog(context);
+              result = await showPatternPage(context);
               closed = true;
             },
             child: const Text('open'),
@@ -98,13 +99,23 @@ void main() {
     expect(find.text('Draw a new pattern'), findsOneWidget);
   });
 
-  testWidgets('cancelling returns null', (tester) async {
+  testWidgets('backing out returns null', (tester) async {
+    // 整页之后「取消」就是返回箭头，不再是页面里的一个按钮。
     await open(tester);
 
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
 
     expect(closed, isTrue);
     expect(result, isNull);
+  });
+
+  testWidgets('opens as a route, not a dialog', (tester) async {
+    // 换成整页的理由：对话框里那块网格只有 260 见方，比锁屏上真正解锁用的
+    // 那块还小，手感对不上。
+    await open(tester);
+
+    expect(find.byType(Dialog), findsNothing);
+    expect(tester.getSize(find.byType(PatternLock)), const Size(280, 280));
   });
 }

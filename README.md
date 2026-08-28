@@ -2,10 +2,17 @@
 
 把任意网页打包成 Android / iOS App。一套 Dart 代码出双端。
 
+[在线构建](#在线构建不用装任何东西) · [图标](#图标从哪来) ·
+[配置分两层](#配置分两层) · [设置页](#设置页入口) · [应用锁](#应用锁) ·
+[检查更新](#检查更新) · [预设站点](#预设站点) · [签名](#android-发布签名) ·
+[退出码](#退出码) · [开发](#开发)
+
 ## 在线构建（不用装任何东西）
 
-现阶段，要在本地要跑 `pakem` 得先有 Flutter SDK + Android SDK + JDK，这不是随手就能凑齐的
-一套。推荐走 GitHub Actions：
+打包的活由仓库里的 `pakem` CLI 干。但在本地跑它得先有 Flutter SDK +
+Android SDK + JDK，这不是随手就能凑齐的一套，所以**本地用法暂时不在这里
+展开**——下面提到的 `pakem` 命令是在讲它的行为，不是让你现在就去装。
+推荐走 GitHub Actions：
 
 1. **[Fork 这个仓库](https://github.com/sunbird89629/pake_mobile/fork)**
    ——`workflow_dispatch` 要仓库的写权限，在别人的仓库里你看不到
@@ -32,17 +39,10 @@ fork 里没有签名密钥，构建会回落到 Flutter 的 debug key，而**那
 第一次那个，会被系统以签名不符拒绝，只能卸载重装、丢掉 app 里的所有数据。
 构建结果页（job summary）会标出本次是哪种签名。
 
-自用的话忍一次卸载重装也行。要能持续更新，就在你自己的 fork 里配一次密钥
-（[生成方式](#android-发布签名)），把它设成三个 repo secret：
-
-| secret | 值 |
-|---|---|
-| `ANDROID_KEYSTORE_BASE64` | `base64 < keystore.p12 \| tr -d '\n'` |
-| `ANDROID_KEYSTORE_PASSWORD` | keystore 密码 |
-| `ANDROID_KEY_ALIAS` | key alias |
-
-配好之后每次构建都用同一张证书签，包与包之间就能正常覆盖升级了。
-**这个 keystore 丢了就没法再给同一个 app 发更新**，备份它。
+自用的话忍一次卸载重装也行。要能持续更新，就在你自己的 fork 里配一次密钥，
+设成三个 repo secret——生成方式和 secret 名字见
+[Android 发布签名](#android-发布签名)。**这个 keystore 丢了就没法再给同一个
+app 发更新**，备份它。
 
 ## 图标从哪来
 
@@ -101,6 +101,18 @@ pakem build https://example.com --debug-ui
 
 它仍然是 release 构建（签名、体积、性能都不变），只是把那几项放回设置页。
 
+## 应用锁
+
+设置页里可以开一道手势图案锁（3×3 九宫格，至少连 4 个点）：冷启动时锁，
+切后台超过 30 秒回来也锁。图案有方向，`1-2-3` 和 `3-2-1` 不是同一个。
+
+存的是图案的 SHA-256，**不加盐**：威胁模型是「别人拿起我的手机」，不是取证
+分析——拿到设备的人本来就能本地枚举全部合法图案（不到 40 万种，秒级）。
+哈希换来的只是「翻一眼存储文件不会直接看到密码」这一件事。
+
+**忘了图案没有恢复路径**——锁屏盖住了底部工具栏，只能清应用数据或重装。
+这是刻意的：留后门的锁不叫锁。锁着的时候系统返回键也不响应。
+
 ## 检查更新
 
 打好的 app 冷启动时会去主仓的 GitHub Releases 查有没有新版，一天最多一次；
@@ -143,8 +155,7 @@ tag 由 CLI 拼成 `<bundleId 末段>-v<version>`（`com.pake.fourkvm` + `1.2.0`
   这 100 条就再也检测不到
 - **墙内基本查不到。** `api.github.com` 不可达时一律静默——不弹错、不重试
 - **只给 arm64 设备推包。** 构建是 `--split-per-abi` 的三个 APK，app 端认
-  `arm64-v8a`；只剩 32 位的老设备拿到的包装不上。一条 release 里挂了多个 app
-  的包时再按 app 名筛一道，筛不出唯一一个就回落到 release 页面让人自己挑
+  `arm64-v8a`；只剩 32 位的老设备拿到的包装不上
 
 ## 预设站点
 
@@ -168,34 +179,16 @@ tag 格式。发出来一律是 **pre-release**，所以已装的 app 不会看�
 ```
 
 版本号没动过的 preset 会被跳过（job summary 里会写明是哪个、为什么）——一次
-跑构建全部三个 app，「这个版本已经发过了」是常态，不是错误。
+跑构建全部三个 app，「这个版本已经发过了」是常态，不是错误。所以 json 里的
+`version` 是唯一要动的字段：漏写会回落 CLI 的默认值 `1.0.0`，而不 bump 就
+什么都不会发出去。
 
 **签名不对就不发。** 没配 `ANDROID_KEYSTORE_*` secrets 时构建会回落 debug
 key，那种包装不到任何别的构建之上；workflow 查到 `androidSigning` 不是
 `release` 就直接失败，产物仍然留在 Actions artifacts 里供排查。
 
-json 里的 `version` 会传给构建，漏写就回落 CLI 的默认值 `1.0.0`。它定的是
-versionCode——不 bump 的话新出的包在系统眼里和上一个一模一样，装到同一台
-手机上分不出新旧。（这批包不参与更新检查，见上一节。）
-
 域名被墙时的处置是**换域名，不是加代理**：GFW 按域名封锁，同一站点的备用
 域名往往直连可达——`4kvm.site`、`dadatuys.com` 都是这么换过来的。
-
-## 应用锁
-
-设置页里可以开一道手势图案锁（3×3 九宫格，至少连 4 个点）：冷启动时锁，
-切后台超过 30 秒回来也锁。图案有方向，`1-2-3` 和 `3-2-1` 不是同一个。
-
-存的是图案的 SHA-256，**不加盐**：威胁模型是「别人拿起我的手机」，不是取证
-分析——拿到设备的人本来就能本地枚举全部合法图案（不到 40 万种，秒级）。
-哈希换来的只是「翻一眼存储文件不会直接看到密码」这一件事。
-
-**忘了图案没有恢复路径**——锁屏盖住了底部工具栏，只能清应用数据或重装。
-这是刻意的：留后门的锁不叫锁。锁着的时候系统返回键也不响应。
-
-## 退出码
-
-`1` 配置错误 · `2` 环境缺失 · `3` 构建失败。`--json` 模式下错误同样是 JSON。
 
 ## Android 发布签名
 
@@ -206,16 +199,7 @@ versionCode——不 bump 的话新出的包在系统眼里和上一个一模一
 预设 app 走 CI 那条通道，密钥只在 GitHub secrets 里，本机不需要配。下面这套
 是给自己在本地打、用 `pakem release` 发的 app 用的。
 
-配置方式是在 `~/.pake/signing.properties` 放四行（`storeFile` 用绝对路径）：
-
-```properties
-storeFile=/Users/you/.pake/pake-release.p12
-storePassword=…
-keyAlias=pake
-keyPassword=…
-```
-
-没有密钥就先生成一个：
+先生成一个 keystore：
 
 ```bash
 keytool -genkeypair -v -keystore ~/.pake/pake-release.p12 -storetype PKCS12 \
@@ -224,16 +208,37 @@ keytool -genkeypair -v -keystore ~/.pake/pake-release.p12 -storetype PKCS12 \
 chmod 600 ~/.pake/pake-release.p12 ~/.pake/signing.properties
 ```
 
+再在 `~/.pake/signing.properties` 放四行（`storeFile` 用绝对路径）：
+
+```properties
+storeFile=/Users/you/.pake/pake-release.p12
+storePassword=…
+keyAlias=pake
+keyPassword=…
+```
+
 这个文件放在 workspace 之外是必须的：`~/.pake/workspace` 每次构建都会被
 模板覆写，放里面会被冲掉；放仓库里则等于把私钥提交上去。
 
 **keystore 丢了就没法再给同一个 app 发更新**，用户只能卸载重装。备份它。
 
-CI 用同一套约定，密钥来自三个 repo secret：`ANDROID_KEYSTORE_BASE64`
-（`base64 < keystore.p12 | tr -d '\n'`）、`ANDROID_KEYSTORE_PASSWORD`、
-`ANDROID_KEY_ALIAS`。没设这些 secret 时 build workflow 照常出包，但会在
-job summary 里标出 debug 签名并给一条 warning。fork 出来用
-[在线构建](#在线构建不用装任何东西)的场景同理，那边写了后果。
+CI 用同一套约定，密钥来自三个 repo secret：
+
+| secret | 值 |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | `base64 < keystore.p12 \| tr -d '\n'` |
+| `ANDROID_KEYSTORE_PASSWORD` | keystore 密码 |
+| `ANDROID_KEY_ALIAS` | key alias |
+
+`build.yml` 没设这些 secret 时照常出包，但会在 job summary 里标出 debug 签名
+并给一条 warning——fork 出来用[在线构建](#在线构建不用装任何东西)就是这种
+情况，后果那节写了。`build-presets.yml` 不一样，它查到不是 release 签名会
+直接失败，因为那批包是发给用户装的。
+
+## 退出码
+
+`1` 配置错误 · `2` 环境缺失 · `3` 构建失败。`--json` 模式下错误同样是 JSON，
+这套分级是给脚本和 agent 分支用的。
 
 ## 开发
 
@@ -261,3 +266,6 @@ cd packages/pake_cli && dart test test/icon_discovery_live_test.dart --run-skipp
 所以图标那个用例哪天因为 x.com 改版而变红，只会红在你手上，不会把 CI 搞红。
 
 发版前跑 [手动回归清单](docs/manual-regression.md)。
+
+想做还没做的功能点记在 [`docs/roadmap.md`](./docs/roadmap.md)，落地过程记在
+[`docs/develop_log.md`](./docs/develop_log.md)。

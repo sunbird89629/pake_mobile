@@ -340,14 +340,15 @@ void main() {
       expect(find.byKey(const ValueKey('changePattern')), findsOneWidget);
     });
 
-    testWidgets('cancelling the pattern dialog leaves the lock off', (
+    testWidgets('backing out of the pattern page leaves the lock off', (
       tester,
     ) async {
       await pump(tester);
 
       await tester.tap(find.byKey(const ValueKey('appLock')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Cancel'));
+      // 设置图案是一个整页，「取消」就是返回箭头。
+      await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
 
       expect(config.appLockEnabled, isFalse);
