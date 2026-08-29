@@ -3,7 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:pake_shell/src/widgets/action_button.dart';
 
-/// 浮在网页之上的底部工具栏：后退、刷新、设置。
+/// 浮在网页之上的底部工具栏：后退、刷新、设置、更多。
 ///
 /// 删掉 `EscapeHatch` 之后，这里的 ⚙ 和错误页那个按钮是仅剩的两个设置入口。
 /// **因此这条栏绝不能做成可配置关闭**——用户在设置页把它关掉、退出设置，就
@@ -20,6 +20,7 @@ class BottomBar extends StatelessWidget {
     required this.onBack,
     required this.onReload,
     required this.onOpenSettings,
+    required this.onMore,
   });
 
   /// 显示还是隐藏。隐藏时向下滑出屏幕，并停止接收点击。
@@ -34,12 +35,18 @@ class BottomBar extends StatelessWidget {
   final VoidCallback onReload;
   final VoidCallback onOpenSettings;
 
+  /// 打开「更多」菜单（分享等）。见 `more_menu.dart`。
+  final VoidCallback onMore;
+
   /// 栏高。也被 `barStateAfterScroll` 当作「算不算在页面顶部」的阈值。
   static const height = 64.0;
 
-  /// 固定宽度。三个 56 的触控格加起来 168，剩下的 40 由 `spaceEvenly` 均分
-  /// 成四个 10 的间隙——按钮不抱团，也不贴边。
-  static const _width = 208.0;
+  /// 固定宽度。四个 56 的触控格加起来 224，剩下的 50 由 `spaceEvenly` 均分
+  /// 成五个 10 的间隙——按钮不抱团，也不贴边。
+  ///
+  /// **四个就到头了。** 再加一个是 340，在 360dp 宽的窄屏上只剩 10 的余量，
+  /// 已经不像一块浮在网页上的胶囊了。所以第五个功能只能进「更多」菜单。
+  static const _width = 274.0;
 
   static const _radius = 18.0;
   static const _tapTarget = 56.0;
@@ -114,6 +121,12 @@ class BottomBar extends StatelessWidget {
                         icon: Icons.settings_outlined,
                         tooltip: 'Settings',
                         onPressed: onOpenSettings,
+                      ),
+                      ActionButton(
+                        tapTarget: _tapTarget,
+                        icon: Icons.more_horiz,
+                        tooltip: 'More',
+                        onPressed: onMore,
                       ),
                     ],
                   ),

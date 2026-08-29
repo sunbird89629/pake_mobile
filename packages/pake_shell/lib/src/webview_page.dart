@@ -9,9 +9,11 @@ import 'package:logger_utils/logger_utils.dart';
 
 import 'bottom_bar.dart';
 import 'error_page.dart';
+import 'more_menu.dart';
 import 'net/net_log.dart';
 import 'net/net_record.dart';
 import 'runtime_config.dart';
+import 'share.dart';
 
 /// 底部栏翻转显隐所需的累计位移，逻辑像素。
 ///
@@ -222,6 +224,36 @@ class WebViewPageState extends State<WebViewPage> {
     supportZoom: false,
   );
 
+  Future<void> _openMore() async {
+    final action = await showMoreMenu(context);
+    if (action == null || !mounted) return;
+
+    switch (action) {
+      case MoreAction.share:
+        await _sharePage();
+    }
+  }
+
+  /// 分享**当前页**，不是配置里那个首页 URL——逛到第三层想丢给朋友的正是
+  /// 那一页。所以现问一次 WebView，而不是读 `config.url`。
+  ///
+  /// 控制器还没建好、或者原生那边给不出地址时才回落到首页地址：分享一条
+  /// 差一点的链接，也好过按钮点下去什么都不发生。
+  Future<void> _sharePage() async {
+    final url = (await _controller?.getUrl())?.toString() ?? widget.config.url;
+    final title = await _controller?.getTitle();
+    if (!mounted) return;
+
+    // iPad 上 popover 得有锚点。拿整页的盒子——菜单这时已经关了，那个
+    // ListTile 的 RenderBox 已经不在树上。
+    final box = context.findRenderObject() as RenderBox?;
+    await sharePage(
+      url: url,
+      title: title,
+      origin: box == null ? null : box.localToGlobal(Offset.zero) & box.size,
+    );
+  }
+
   /// 导航到了新地址（含 SPA 的 pushState/replaceState/hash 变化）。
   Future<void> _onNavigated(InAppWebViewController controller) async {
     final canGoBack = await controller.canGoBack();
@@ -314,6 +346,7 @@ class WebViewPageState extends State<WebViewPage> {
                   // 回首页。刷新就是重载当前页。
                   onReload: () => _controller?.reload(),
                   onOpenSettings: widget.onOpenSettings,
+                  onMore: _openMore,
                 ),
               ),
             ],
