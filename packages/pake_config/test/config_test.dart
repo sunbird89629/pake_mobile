@@ -29,6 +29,7 @@ void main() {
         url: 'https://example.com',
         bundleId: 'com.example.demo',
         version: '1.2.3',
+        description: '一句话介绍。',
         buildNumber: 7,
         iconPath: 'assets/icon.png',
         injectScripts: ['a.js', 'b.css'],
@@ -62,6 +63,7 @@ void main() {
       });
 
       expect(c.version, '1.0.0');
+      expect(c.description, isNull);
       expect(c.buildNumber, isNull);
       expect(c.versionCode, 10000);
       expect(c.iconPath, isNull);

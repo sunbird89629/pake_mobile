@@ -113,6 +113,35 @@ void main() {
     expect(runner.calls, isNotEmpty);
   });
 
+  test('--description flows into the materialized pake.json', () async {
+    // 分享 app 时发出去的介绍文案，跟着构建期配置走（pake.json → 壳的
+    // buildTime），不是运行期写进 GetStorage 的东西。
+    final output = Output(json: true, sink: StringBuffer());
+    final command = BuildCommand(
+      output,
+      runner: runner,
+      workspace: ws,
+      templateDir: templateDir,
+    );
+
+    final code = await runnerFor(command).run([
+      'build',
+      'https://m.weibo.cn',
+      '--name',
+      'Weibo',
+      '--bundle-id',
+      'com.pake.weibo',
+      '--description',
+      '微博网页版，装成 App。',
+    ]);
+
+    expect(code, 0);
+    final pakeJson =
+        jsonDecode(File('${ws.projectDir}/assets/pake.json').readAsStringSync())
+            as Map<String, Object?>;
+    expect(pakeJson['description'], '微博网页版，装成 App。');
+  });
+
   test('archives the artifacts into ~/.pake/out/<app>/ and reports those '
       'paths, not the ones inside the workspace', () async {
     // workspace 跨 app 复用且 build/ 从不清理：产物在原地被下一次构建覆盖，

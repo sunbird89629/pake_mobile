@@ -484,3 +484,28 @@ Android 上标题本该走 `EXTRA_SUBJECT`（Chrome 就是这么发的），但�
 
 真机：装 ShareCheck 到 Pixel，从 4kvm 深逛一页点 ⋯ → Share，系统面板出来的是
 当前那一页的标题和地址，不是首页。
+
+
+## 分享的应该是 app 本身，不是当前页
+
+上一节做的是「分享当前页」——真机面板弹出来是 4kvm 站点那一页的标题和
+`www.4kvm.tv` 地址。对着真面板一看就明白了：朋友收到这条链接，打开的是
+网页，装不了壳。口口相传分享的是 app：影视站这类没有应用市场，装机渠道
+就是「朋友发给朋友」。
+
+### 换成什么
+
+- **内容**：app 名 + 一句话介绍 + 本版本 release 页地址。介绍来自构建期
+  配置新增的 `description` 字段（`pakem build --description` 或 preset 的
+  json），三个 preset 各写了一句——分享出去的每条消息都说得清「这是什么、
+  能干什么」。
+- **链接**：`releasePageUrl()` 离线拼 `<bundleId 末段>-v<version>` 的 tag，
+  指向 release 页而不是 APK 直链。一条 release 挂三个 ABI 的包，直链钉死
+  一个（通常 arm64）发到别的设备就是「应用未安装」；release 页让人按设备
+  自己挑。
+- **壳里的 tag 格式又出现了一处**：CLI 的 `tagFor()` 写、`parseTag()` 读，
+  现在 `releasePageUrl()` 拼。它按 `parseTag` 承认的那一个规则拼（bundleId
+  末段 + `-v` + 版本），注释里写明真相源在 CLI，改格式要两边一起改。
+
+`--description` 走的是现有的 `PakeFlags` / `mergeConfig` 通道（pake.json →
+壳的 `buildTime`），和 name、version 一个待遇，没有为它单开一条路径。

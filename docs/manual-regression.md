@@ -45,9 +45,11 @@
 
 分享：
 
-- [ ] 从首页点进二级页再点 ⋯ → Share，系统面板里带出来的是**那一页**的标题和
-      地址，不是首页——这条是自动化测不到的，`getUrl()` 走的是平台通道。
-- [ ] 分到一个只读 `EXTRA_TEXT` 的 app（微信、QQ）里，标题和链接两行都在。
+- [ ] ⋯ → Share app，系统面板里是三行：**app 名、description 里的介绍、
+      本版本的 release 页地址**（不是站点 URL，也不是首页）。地址打开是
+      GitHub 上这个 app 那条 release，APK 真的能下。
+- [ ] 分到一个只读 `EXTRA_TEXT` 的 app（微信、QQ）里，名字、介绍和链接
+      三行都在。
 
 检查更新（`docs/superpowers/specs/2026-08-21-update-check-design.md`）：
 

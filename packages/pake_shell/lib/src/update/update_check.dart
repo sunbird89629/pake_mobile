@@ -71,6 +71,23 @@ List<int>? parseTag(String tag, String prefix) {
   return parseVersion(tag.substring(expected.length));
 }
 
+/// 本 app 某个版本的 release 页面地址，分享 app 时发出去。
+///
+/// tag 格式沿用 [parseTag] 承认的 `<bundleId 末段>-v<version>`——CLI 的
+/// `tagFor()` 是写的一方，壳是读的一方，格式的真相源在 CLI，改格式要两边
+/// 一起改。这里拼的是 [parseTag] 那个规则，所以两边对得上。
+///
+/// 指向 release 页而不是 APK 直链：一条 release 挂三个 ABI 的包，直链只能
+/// 钉死一个（通常是 arm64），发到别的设备上就是「应用未安装」。release 页
+/// 让人按设备自己挑。
+Uri releasePageUrl({
+  required String bundleId,
+  required String version,
+  String repo = updateRepo,
+}) => Uri.parse(
+  'https://github.com/$repo/releases/tag/${tagPrefixFor(bundleId)}-v$version',
+);
+
 /// 从 `/releases` 的响应里挑出比 [currentVersion] 更新的那个。
 ///
 /// 结构不对、字段缺失、一个都不匹配，全都返回 null——这条路径上任何异常都

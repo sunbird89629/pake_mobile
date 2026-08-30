@@ -9,6 +9,7 @@ class PakeFlags {
     this.url,
     this.bundleId,
     this.version,
+    this.description,
     this.buildNumber,
     this.iconPath,
     this.injectScripts,
@@ -19,6 +20,7 @@ class PakeFlags {
   final String? url;
   final String? bundleId;
   final String? version;
+  final String? description;
   final int? buildNumber;
   final String? iconPath;
   final List<String>? injectScripts;
@@ -38,6 +40,7 @@ PakeConfig mergeConfig({Map<String, Object?>? fileJson, PakeFlags? flags}) {
     url: flags.url,
     bundleId: flags.bundleId,
     version: flags.version,
+    description: flags.description,
     buildNumber: flags.buildNumber,
     iconPath: flags.iconPath,
     injectScripts: flags.injectScripts,

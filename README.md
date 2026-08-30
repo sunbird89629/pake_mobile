@@ -116,12 +116,15 @@ pakem build https://example.com --debug-ui
 
 ## 分享
 
-底部栏的 ⋯ 弹出「更多」，第一条是 Share，走系统分享面板。
+底部栏的 ⋯ 弹出「更多」，第一条是 Share app，走系统分享面板。
 
-发出去的是**当前页**的标题和 URL，不是构建时那个首页地址——逛到第三层想丢给
-朋友的正是那一页。正文是「标题 + 换行 + URL」两行：标题按理该走 Android 的
-`EXTRA_SUBJECT`（也照样带了），但微信、QQ 这类只读 `EXTRA_TEXT`，只发链接的话
-对面看不出是哪部片。
+发出去的是**这个 app 本身**：名字、`description` 里那句介绍、以及本 app 当前
+版本的 release 页地址（`<bundleId 末段>-v<version>` 的 tag）。朋友从 release
+页按自己的设备挑 APK 装——直链只能钉死一个 ABI，发错设备就是「应用未安装」。
+
+介绍文案来自构建期配置（`pakem build --description` 或 preset 里的
+`description` 字段），所以每个 app 说得出自己是干什么的。分享的是 app 而不是
+当前页：站点 URL 接不到壳的安装包，朋友拿去打开的是网页，不是这个 app。
 
 反向的「别的 app 分享链接进来用这个壳打开」不做：单站壳收到任意链接没地方放。
 

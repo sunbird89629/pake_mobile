@@ -48,6 +48,7 @@ class BuildCommand extends Command<int> {
       ..addOption('icon')
       ..addOption('bundle-id')
       ..addOption('version')
+      ..addOption('description')
       ..addOption('team-id')
       ..addOption('profile')
       ..addMultiOption('inject')
@@ -107,6 +108,7 @@ class BuildCommand extends Command<int> {
         url: url,
         bundleId: args.option('bundle-id'),
         version: args.option('version'),
+        description: args.option('description'),
         iconPath: args.option('icon'),
         injectScripts: args.wasParsed('inject')
             ? args.multiOption('inject')

@@ -43,6 +43,7 @@ class PakeConfig {
     required this.url,
     required this.bundleId,
     this.version = '1.0.0',
+    this.description,
     this.buildNumber,
     this.iconPath,
     this.injectScripts = const [],
@@ -57,6 +58,7 @@ class PakeConfig {
       url: json['url'] as String? ?? '',
       bundleId: json['bundleId'] as String? ?? '',
       version: json['version'] as String? ?? '1.0.0',
+      description: json['description'] as String?,
       buildNumber: json['buildNumber'] as int?,
       iconPath: json['iconPath'] as String?,
       injectScripts: rawScripts.map((e) => e! as String).toList(),
@@ -71,6 +73,11 @@ class PakeConfig {
   final String url;
   final String bundleId;
   final String version;
+
+  /// 一句话介绍这个 app 是干什么的。分享 app（「更多」菜单里的 Share app）
+  /// 时跟着名字一起发出去——影视站这类靠口口相传，朋友点开链接前要先知道
+  /// 它是什么。可空：没写的 app 分享时只有名字和下载地址。
+  final String? description;
 
   /// 显式钉死 versionCode 的后门：同一个 version 要重发一次包时用。
   /// 不写就由 [versionCodeFor] 从 version 推——那是常态。
@@ -87,6 +94,7 @@ class PakeConfig {
     'url': url,
     'bundleId': bundleId,
     'version': version,
+    if (description != null) 'description': description,
     if (buildNumber != null) 'buildNumber': buildNumber,
     if (iconPath != null) 'iconPath': iconPath,
     'injectScripts': injectScripts,
@@ -98,6 +106,7 @@ class PakeConfig {
     String? url,
     String? bundleId,
     String? version,
+    String? description,
     int? buildNumber,
     String? iconPath,
     List<String>? injectScripts,
@@ -107,6 +116,7 @@ class PakeConfig {
     url: url ?? this.url,
     bundleId: bundleId ?? this.bundleId,
     version: version ?? this.version,
+    description: description ?? this.description,
     buildNumber: buildNumber ?? this.buildNumber,
     iconPath: iconPath ?? this.iconPath,
     injectScripts: injectScripts ?? this.injectScripts,
@@ -120,6 +130,7 @@ class PakeConfig {
       other.url == url &&
       other.bundleId == bundleId &&
       other.version == version &&
+      other.description == description &&
       other.buildNumber == buildNumber &&
       other.iconPath == iconPath &&
       _listEq(other.injectScripts, injectScripts) &&
@@ -131,6 +142,7 @@ class PakeConfig {
     url,
     bundleId,
     version,
+    description,
     buildNumber,
     iconPath,
     Object.hashAll(injectScripts),

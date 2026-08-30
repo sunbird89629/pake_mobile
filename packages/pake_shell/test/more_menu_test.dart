@@ -27,14 +27,16 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('share returns MoreAction.share and closes', (tester) async {
+    testWidgets('share app returns MoreAction.shareApp and closes', (
+      tester,
+    ) async {
       await open(tester);
 
-      await tester.tap(find.byKey(const ValueKey('more:share')));
+      await tester.tap(find.byKey(const ValueKey('more:share-app')));
       await tester.pumpAndSettle();
 
       expect(closed, isTrue);
-      expect(result, MoreAction.share);
+      expect(result, MoreAction.shareApp);
     });
 
     testWidgets('dismissing returns null', (tester) async {
