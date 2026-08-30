@@ -76,7 +76,10 @@ void main() {
   group('releasePageUrl', () {
     test('points at this app\'s release page, not a repo-wide list', () {
       expect(
-        releasePageUrl(bundleId: 'com.pake.fourkvm', version: '1.2.0').toString(),
+        releasePageUrl(
+          bundleId: 'com.pake.fourkvm',
+          version: '1.2.0',
+        ).toString(),
         'https://github.com/sunbird89629/pake_mobile/releases/tag/fourkvm-v1.2.0',
       );
     });
@@ -84,7 +87,10 @@ void main() {
     test('takes the tag from the bundleId tail', () {
       // 和 parseTag 承认的格式同一个规则：bundleId 末段 + -v + 版本。
       expect(
-        releasePageUrl(bundleId: 'com.example.my.app', version: '0.1.0').toString(),
+        releasePageUrl(
+          bundleId: 'com.example.my.app',
+          version: '0.1.0',
+        ).toString(),
         'https://github.com/sunbird89629/pake_mobile/releases/tag/app-v0.1.0',
       );
     });
