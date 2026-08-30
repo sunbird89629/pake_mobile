@@ -2,6 +2,6 @@
   "name": "YouTube",
   "url": "https://www.youtube.com/",
   "bundleId": "com.pake.youtube",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "YouTube 网页版，装成独立的 App，打开即用。"
 }
