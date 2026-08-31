@@ -1,14 +1,18 @@
 # pake_mobile
 
-把任意网页打包成 Android / iOS App。一套 Dart 代码出双端。
+把任意网页打包成 Android / iOS 原生 App。
 
 ![test](https://github.com/sunbird89629/pake_mobile/actions/workflows/test.yml/badge.svg)
 ![license](https://img.shields.io/github/license/sunbird89629/pake_mobile)
 
-- ⚡ **在线打包**——fork 后 GitHub Actions 直接出包，本机不用装 Flutter / Android SDK
-- 🧩 **预设 app 即装即用**——4KVM、哒哒兔、YouTube
-- 🔒 **内置应用锁**——手势图案锁住冷启动，切后台回来也要解锁
-- 🔄 **自动检查更新**——发了新版，装了的人会收到提示
+## 为什么要把网站打包成原生 App
+
+很多网站只在浏览器里活着，不是它们不配有个 app，是没人给它们打包。
+
+- 📱 **点开就是它**——天天用的站值得一个图标
+- 🖥 **没有浏览器打扰**——地址栏、工具栏、多标签都不在了，屏幕全是内容
+- 🔒 **应用锁**——手势图案锁住冷启动，手机递给别人也打不开你的追剧 app。
+- 📤 **分享的是 app，不是网址**——发朋友一个「追剧 app」装上就能看。
 
 按你的需求选一条路：
 
