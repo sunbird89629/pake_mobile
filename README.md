@@ -31,6 +31,8 @@ ABI 的包，现役手机（arm64）装名字里带 `arm64-v8a` 的那个。
 | DADATU（哒哒兔） | 电影、综艺、动漫在线观看 | [dadatu-v0.2.0](https://github.com/sunbird89629/pake_mobile/releases/tag/dadatu-v0.2.0) |
 | YouTube | 网页版装成独立的 App，打开即用 | [youtube-v0.2.0](https://github.com/sunbird89629/pake_mobile/releases/tag/youtube-v0.2.0) |
 
+![4KVM](docs/images/fourkvm.png) ![DADATU](docs/images/dadatu.png) ![YouTube](docs/images/youtube.png)
+
 ### 设置页
 
 底部悬浮工具栏上的 ⚙。工具条浮在网页之上，上滑隐藏、下滑显示，滑到页面
@@ -55,6 +57,8 @@ ABI 的包，现役手机（arm64）装名字里带 `arm64-v8a` 的那个。
 设备的人枚举，全部合法图案不到 40 万种。**忘了图案没有恢复路径**：锁屏
 盖住了工具栏，系统返回键也不响应，只能清应用数据或重装。这是刻意的：
 留后门的锁不叫锁。
+
+![图案锁](docs/images/pattern-lock.png)
 
 ### 分享
 
@@ -85,6 +89,8 @@ SDK、JDK。
    相同，否则装在一起会互相覆盖）；图标留空会自己从站点抓，抓不到就按 app 名
    生成一个（见[图标从哪来](#图标从哪来)），版本留空是 `1.0.0`
 4. 跑完在仓库的 **Releases** 里取包——不用去 Artifacts，那个 90 天就过期了
+
+![Run workflow 表单](docs/images/run-workflow.png)
 
 一次出三个包（`--split-per-abi`），现役手机基本都装
 `app-arm64-v8a-release.apk`。有 Gradle 缓存时约 4~5 分钟（实测）；fork 后
