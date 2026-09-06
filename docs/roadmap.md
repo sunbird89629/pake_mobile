@@ -19,9 +19,6 @@
   刷新 = reload，深逛之后想回入口只能手动。两条都进底部栏的「更多」菜单（分享那条已经把
   菜单和「读当前页 URL」都做出来了，这里是往里加行）。
 
-- **页内查找**
-  `flutter_inappwebview` 自带 `findAll()` / `findNext()`，底部栏加入口就行。长文站点实用。
-
 - **用外部浏览器打开当前页**
   壳里做不了的事总有几件：Google 登录在 embedded WebView 里被直接拒（调研见
   [`google_account_login_research.md`](./google_account_login_research.md)）、某些下载和
@@ -34,6 +31,10 @@
   用户对当前页主动这么做。
 
 ## 以后
+
+- **页内查找**
+  `flutter_inappwebview` 自带 `findAll()` / `findNext()`。移动端用得少——触屏长页里定位
+  文字不如直接搜，入口也不好放；等以后做 PC 端时再加，键盘 Ctrl+F 在桌面是刚需。
 
 - **网页通知 → 系统通知桥**
   注入脚本里用 `Object.defineProperty` 换掉 `window.Notification`，经 `local_notifications` 发到原生。
