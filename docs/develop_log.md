@@ -573,7 +573,8 @@ README 进了 5 张图：预设 app ×3（4KVM / DADATU / YouTube，一行并排
 cookie，而 Google 登录在 embedded WebView 里又是被直接拒的（调研见
 [`google_account_login_research.md`](./google_account_login_research.md)）。
 所以它解决的是「壳里做不了的事」（登录、某些支付/下载、拿真浏览器对一眼
-排查），跟 `safeDomains` 的「外域自动丢出去」是两码事。
+排查），跟「深链与下载分流」的自动拦截是两码事——那个是点链接时按 scheme/
+下载自动分流，这个是用户对当前页主动这么做。
 
 ### 验证
 

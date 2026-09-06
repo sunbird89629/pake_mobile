@@ -58,8 +58,8 @@ dart pub global activate --source path packages/pake_cli
 **启用后的规则：** 0.x 期 **minor = breaking**（命令名、参数名、`pake.json`
 schema、`ExitCodes` 分级、`--json` 输出结构），patch 是新功能和修 bug。
 上 1.0.0 的判据同样要可检验，不能靠感觉：**roadmap「近期」里会动 schema 的
-条目清空时**。现在还挂着三条（`safeDomains` 要加 config 字段、preset 携带
-更多默认值要改 schema、CLI `--json` 输出），离 1.0.0 还远——这本身就是
+条目清空时**。现在还挂着两条（preset 携带更多默认值要改 schema、CLI `--json`
+输出），离 1.0.0 还远——这本身就是
 现在不该编号的旁证。
 
 ### 两处 bump 版本号救不了的 breaking
@@ -136,7 +136,7 @@ Android 拒绝 versionCode 更低的包覆盖安装（`INSTALL_FAILED_VERSION_DO
 
 ## 不做：远程配置热更
 
-注入脚本、`safeDomains`、UA 这些从远端拉、不重装 APK 就生效——技术上成立，
+注入脚本、UA 这些从远端拉、不重装 APK 就生效——技术上成立，
 但它会引入第二个版本号轴（配置版本），而这个壳的配置改动频率根本撑不起
 那套机制。真需要时再说，见 [`roadmap.md`](./roadmap.md)。
 
