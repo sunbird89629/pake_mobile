@@ -143,10 +143,18 @@ class WebViewPageState extends State<WebViewPage> {
     super.dispose();
   }
 
+  /// 脚本只准注入回目标站自己的 origin，登录跳转到的 `accounts.google.com`
+  /// 之类第三方域名不能沾——WebView 默认把 `UserScript` 灌进它经过的每一个
+  /// origin，网络抓包 hook 会替换 fetch/XHR、注入脚本会改 DOM，这两样落在
+  /// Google 的登录页上，正是它风控最想抓的"内嵌浏览器篡改页面"信号，见
+  /// `docs/google_account_login_research.md`。
+  Set<String> get _ownOriginRule => {Uri.parse(widget.config.url).origin};
+
   /// 读构建期物化出的脚本清单，按运行期开关过滤。
   Future<void> _loadScripts() async {
     final enabled = widget.config.enabledScripts;
     final scripts = <UserScript>[];
+    final originRule = _ownOriginRule;
 
     try {
       final manifest =
@@ -165,6 +173,7 @@ class WebViewPageState extends State<WebViewPage> {
             injectionTime: entry['kind'] == 'css'
                 ? UserScriptInjectionTime.AT_DOCUMENT_END
                 : UserScriptInjectionTime.AT_DOCUMENT_START,
+            allowedOriginRules: originRule,
           ),
         );
       }
@@ -182,6 +191,7 @@ class WebViewPageState extends State<WebViewPage> {
           groupName: '__pake_net_hook',
           source: await rootBundle.loadString('assets/net_hook.js'),
           injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+          allowedOriginRules: originRule,
         ),
       );
     }
