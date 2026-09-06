@@ -3,5 +3,6 @@
   "url": "https://www.dadatuys.com/",
   "bundleId": "com.pake.dadatu",
   "version": "0.2.0",
-  "description": "哒哒兔影视：电影、综艺、动漫在线观看。"
+  "description": "哒哒兔影视：电影、综艺、动漫在线观看。",
+  "injectScripts": ["presets/adblock.css"]
 }

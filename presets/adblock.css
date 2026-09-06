@@ -1,0 +1,28 @@
+/* 内置去广告：按常见广告容器的命名规律整段隐藏。
+   原则是「宁漏勿误」——只匹配名字明显是广告的节点，不动正常布局。
+   误伤了就在设置页里关掉 adblock 这条脚本。 */
+
+/* 以 ad/ads 开头，或包在 -ad- / _ad_ 里的容器 */
+[id^="ad-"], [id^="ads-"], [id^="ad_"], [id^="ads_"],
+[class^="ad-"], [class^="ads-"], [class^="ad_"], [class^="ads_"],
+[id*="-ad-"], [id*="-ads-"], [id*="_ad_"], [id*="_ads_"],
+[class*="-ad-"], [class*="-ads-"], [class*="_ad_"], [class*="_ads_"],
+
+/* advertisement / advertise / advert 这类强信号 */
+[id*="advert"], [class*="advert"],
+
+/* 广告网络的 iframe 挂载点 */
+iframe[src*="doubleclick"], iframe[src*="googlesyndication"],
+iframe[src*="adservice"], iframe[src*="adnxs"],
+iframe[src*="adsystem"], iframe[src*="tanx.com"],
+iframe[src*="sinaads"], iframe[src*="cpro.baidu"],
+
+/* 悬浮 / 弹窗 / 贴片广告位 */
+[class*="float-ad"], [class*="floating-ad"], [class*="sticky-ad"],
+[class*="popup-ad"], [class*="pop-ad"], [class*="banner-ad"],
+[class*="ad-banner"], [class*="interstitial"], [class*="reward-ad"],
+
+/* 名字恰好就是 ad / ads 的节点（最弱信号，放最后） */
+#ad, #ads, .ad, .ads {
+  display: none !important;
+}
