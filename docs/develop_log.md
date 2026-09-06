@@ -553,6 +553,33 @@ README 进了 5 张图：预设 app ×3（4KVM / DADATU / YouTube，一行并排
 图案锁、Run workflow 表单。三个预设 app 各自从最新正式版 APK 截出，
 截图内容与表格「干什么」的描述对得上。
 
+## 「更多」菜单：回主页 / 复制当前 URL / 用外部浏览器打开
+
+底部栏第四格「更多」菜单最早只有「分享 app」一条，这次把排队的三个动作
+一起补上：回主页、复制当前 URL、用外部浏览器打开。`MoreAction` 枚举扩到
+四值，每条 `ListTile` 挂一个 `ValueKey`，测试按 key 点一遍、断言弹层返回
+的枚举值——以后加动作只动 enum、ListTile 和 webview_page 的 switch。
+
+### 回主页的 snackbar 要个 Scaffold 宿主
+
+回主页成功/失败想用 snackbar 提示，但壳里本来没有 `Scaffold`（底部栏是
+自绘 widget，页面直接铺 `InAppWebView`）。给当前页包一层透明 `Scaffold`
+当 snackbar 宿主，布局不动，提示有地方挂。
+
+### 外链打开是逃生口，不是常规路径
+
+`url_launcher` 的 `launchUrl(mode: LaunchMode.externalApplication)` 一行
+就把当前页丢给系统浏览器，但登录态带不过去——壳和系统浏览器不共享
+cookie，而 Google 登录在 embedded WebView 里又是被直接拒的（调研见
+[`google_account_login_research.md`](./google_account_login_research.md)）。
+所以它解决的是「壳里做不了的事」（登录、某些支付/下载、拿真浏览器对一眼
+排查），跟 `safeDomains` 的「外域自动丢出去」是两码事。
+
+### 验证
+
+`MoreAction` 四值的 key→enum 映射循环测试覆盖（新增三项各断言一遍）；
+`flutter analyze` 干净，`flutter test` 168 项全过。
+
 ## 内置去广告样式注入
 
 roadmap 里的「去广告」写的是「加一个内置 `adblock.css` 即可」，真做起来

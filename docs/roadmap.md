@@ -15,21 +15,6 @@
 - **为预设 App 添加介绍视频**
   给每个预设 App 配一段介绍视频 URL（或本地路径），在 App 详情页或应用市场页展示。
 
-- **回主页按钮 + 复制当前 URL**
-  刷新 = reload，深逛之后想回入口只能手动。两条都进底部栏的「更多」菜单（分享那条已经把
-  菜单和「读当前页 URL」都做出来了，这里是往里加行）。
-
-- **用外部浏览器打开当前页**
-  壳里做不了的事总有几件：Google 登录在 embedded WebView 里被直接拒（调研见
-  [`google_account_login_research.md`](./google_account_login_research.md)）、某些下载和
-  支付跳转、以及排查「到底是壳的问题还是站点的问题」时想拿真浏览器对一眼。
-  `url_launcher` 的 `launchUrl(mode: LaunchMode.externalApplication)` 一行的事，入口进
-  底部栏的「更多」菜单，和「复制当前 URL」那条挨着做正好。
-
-  说明白一件事：**登录态带不过去**（壳和系统浏览器不共享 cookie），所以它是逃生口，
-  不是常规路径。和 `safeDomains` 那条的区别也在这儿——那个是外域自动丢出去，这个是
-  用户对当前页主动这么做。
-
 ## 以后
 
 - **页内查找**
@@ -125,6 +110,12 @@
   换不来 WebView 里的「已登录」。落地方向是「用外部浏览器打开当前页」当逃生口，并
   把注入脚本限定到站点自己的 origin（不沾登录页）。
   完整调研见 [`google_account_login_research.md`](./google_account_login_research.md)。
+
+- **「更多」菜单：回主页 / 复制当前 URL / 用外部浏览器打开**（2026-09-06）
+  底部栏第四格「更多」菜单在「分享 app」之外补三行：回主页（回到入口 URL，深逛之后
+  一键归位）、复制当前 URL、用外部浏览器打开当前页。外链打开走 `url_launcher` 的
+  `LaunchMode.externalApplication`，登录态带不过去（壳和系统浏览器不共享 cookie），
+  定位是逃生口不是常规路径。落地过程见 [`develop_log.md`](./develop_log.md)。
 
 - **去广告样式注入**（2026-09-06）
   新增内置 `presets/adblock.css`——按常见广告容器的命名规律整段隐藏（`ad-`/`ads-` 前缀、
