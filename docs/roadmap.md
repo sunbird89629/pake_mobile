@@ -37,6 +37,15 @@
 
 - **页面缩放**：`setTextZoom` 走原生而非 CSS hack，做成设置项。
 
+- **UI 安全区与全屏适配**
+  真机截图暴露：横屏全屏看片时网页播放器自己的控件（弹幕输入框）被系统手势导航条
+  切掉一截，顶部状态栏内容也贴边。疑似 WebView 边缘到边缘（edge-to-edge）渲染时没
+  把系统 inset（状态栏、导航条、刘海）让给网页，网页按「屏幕无遮挡」排版，底部控件
+  就沉到导航条下面去了。做法：查清 `flutter_inappwebview` 的 edge-to-edge / SafeArea
+  行为，把状态栏和导航条高度作为 padding 让给 WebView（或开 safe-area 环境变量），
+  横竖屏切换时 inset 跟着变。网页内部播放器的布局冲突（进度条压弹幕）是站点自己的
+  问题，壳不背。
+
 - **preset 携带更多默认值**
   现在 preset 只有 `{name, url, bundleId}`。可扩展成每个预设自带默认脚本集合、默认 UA、无痕开关。
 
