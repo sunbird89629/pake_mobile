@@ -39,6 +39,24 @@ void main() {
       expect(result, MoreAction.shareApp);
     });
 
+    const newEntries = <String, MoreAction>{
+      'more:go-home': MoreAction.goHome,
+      'more:copy-url': MoreAction.copyCurrentUrl,
+      'more:open-in-browser': MoreAction.openInExternalBrowser,
+    };
+
+    newEntries.forEach((key, action) {
+      testWidgets('$key returns $action and closes', (tester) async {
+        await open(tester);
+
+        await tester.tap(find.byKey(ValueKey(key)));
+        await tester.pumpAndSettle();
+
+        expect(closed, isTrue);
+        expect(result, action);
+      });
+    });
+
     testWidgets('dismissing returns null', (tester) async {
       // 点遮罩关掉——调用方靠 null 判断「什么都别做」。
       await open(tester);

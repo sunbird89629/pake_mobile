@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:logger_utils/logger_utils.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'bottom_bar.dart';
 import 'error_page.dart';
@@ -242,6 +243,12 @@ class WebViewPageState extends State<WebViewPage> {
     switch (action) {
       case MoreAction.shareApp:
         await _shareApp();
+      case MoreAction.goHome:
+        await _goHome();
+      case MoreAction.copyCurrentUrl:
+        await _copyCurrentUrl();
+      case MoreAction.openInExternalBrowser:
+        await _openInExternalBrowser();
     }
   }
 
@@ -265,6 +272,44 @@ class WebViewPageState extends State<WebViewPage> {
       ).toString(),
       origin: box == null ? null : box.localToGlobal(Offset.zero) & box.size,
     );
+  }
+
+  /// 回主页：不管深逛到哪一层，直接载入构建时的首页 URL。
+  ///
+  /// 后退是「往历史里退一步」，这个是「跳回入口」——深逛十层之后按十次
+  /// 后退不如按一次。
+  Future<void> _goHome() async {
+    await _controller?.loadUrl(
+      urlRequest: URLRequest(url: WebUri(widget.config.url)),
+    );
+  }
+
+  /// 复制当前页 URL。`getUrl()` 在首屏加载完成前是 null，直接跳过。
+  Future<void> _copyCurrentUrl() async {
+    final url = await _controller?.getUrl();
+    if (url == null || !mounted) return;
+
+    await Clipboard.setData(ClipboardData(text: url.toString()));
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('URL copied')));
+  }
+
+  /// 用系统浏览器打开当前页。
+  ///
+  /// 登录态带不过去（壳和系统浏览器不共享 cookie），所以它是逃生口，不是
+  /// 常规路径——见 `docs/google_account_login_research.md`。
+  Future<void> _openInExternalBrowser() async {
+    final url = await _controller?.getUrl();
+    if (url == null || !mounted) return;
+
+    final ok = await launchUrl(url, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No browser available')));
+    }
   }
 
   /// 导航到了新地址（含 SPA 的 pushState/replaceState/hash 变化）。
@@ -317,52 +362,59 @@ class WebViewPageState extends State<WebViewPage> {
     //
     // 用 Padding 而不是 `ErrorPage` 那样的 SafeArea：SafeArea 会连底部手势条
     // 和横屏两侧的刘海一起避让，播放器上下就多出黑边。这里只让顶部这一处。
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      // 深色底配浅色图标。Android 看 statusBarIconBrightness，iOS 看
-      // statusBarBrightness，两者语义相反，必须都给，否则总有一端是瞎的。
-      value: const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-      ),
-      child: ColoredBox(
-        color: _statusBarBackdrop,
-        child: Padding(
-          // 视频全屏时必须归零：播放器要占满物理屏幕，留着这条 inset
-          // 就是播放器上方的一道黑边。
-          padding: EdgeInsets.only(
-            top: _videoFullscreen ? 0 : MediaQuery.paddingOf(context).top,
-          ),
-          child: Stack(
-            // expand 而不是默认的 loose：loose 下 `_webView` 拿到的是宽松
-            // 约束，撑不撑满取决于 PlatformView 自己的定尺行为。这里要的是
-            // 「网页铺满，胶囊浮在上面」，就把它钉死。
-            fit: StackFit.expand,
-            children: [
-              _webView,
-              // 贴在网页内容顶边（状态栏留白已经由外层 Padding 让开），跟浏览
-              // 器的位置惯例一致。
-              Positioned(top: 0, left: 0, right: 0, child: _progressBar),
-              Positioned(
-                left: 0,
-                right: 0,
-                // 坐在系统手势条**之上**，栏下方露出一条网页。贴着物理底边
-                // 会让栏的背景垫住手势条，看着更整，但那样它就不像浮层了。
-                bottom: MediaQuery.viewPaddingOf(context).bottom + 8,
-                child: BottomBar(
-                  // 视频全屏时一并收走：播放器要占满物理屏幕。
-                  visible: _barVisible && !_videoFullscreen,
-                  canGoBack: _canGoBack,
-                  onBack: () => _controller?.goBack(),
-                  // 不是 reloadWithCurrentSettings：那个方法最后会 loadUrl
-                  // 到配置里的**首页** URL，绑在刷新上会把深层页面的用户扔
-                  // 回首页。刷新就是重载当前页。
-                  onReload: () => _controller?.reload(),
-                  onOpenSettings: widget.onOpenSettings,
-                  onMore: _openMore,
+    return Scaffold(
+      // 这个 Scaffold 只是 snackbar 的宿主（复制 URL 那类反馈要个地方挂），
+      // 不参与布局：`resizeToAvoidBottomInset` 关掉，键盘弹出时不该把 WebView
+      // 顶起来——网页自己处理键盘。
+      backgroundColor: _statusBarBackdrop,
+      resizeToAvoidBottomInset: false,
+      body: AnnotatedRegion<SystemUiOverlayStyle>(
+        // 深色底配浅色图标。Android 看 statusBarIconBrightness，iOS 看
+        // statusBarBrightness，两者语义相反，必须都给，否则总有一端是瞎的。
+        value: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
+        ),
+        child: ColoredBox(
+          color: _statusBarBackdrop,
+          child: Padding(
+            // 视频全屏时必须归零：播放器要占满物理屏幕，留着这条 inset
+            // 就是播放器上方的一道黑边。
+            padding: EdgeInsets.only(
+              top: _videoFullscreen ? 0 : MediaQuery.paddingOf(context).top,
+            ),
+            child: Stack(
+              // expand 而不是默认的 loose：loose 下 `_webView` 拿到的是宽松
+              // 约束，撑不撑满取决于 PlatformView 自己的定尺行为。这里要的是
+              // 「网页铺满，胶囊浮在上面」，就把它钉死。
+              fit: StackFit.expand,
+              children: [
+                _webView,
+                // 贴在网页内容顶边（状态栏留白已经由外层 Padding 让开），跟浏览
+                // 器的位置惯例一致。
+                Positioned(top: 0, left: 0, right: 0, child: _progressBar),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  // 坐在系统手势条**之上**，栏下方露出一条网页。贴着物理底边
+                  // 会让栏的背景垫住手势条，看着更整，但那样它就不像浮层了。
+                  bottom: MediaQuery.viewPaddingOf(context).bottom + 8,
+                  child: BottomBar(
+                    // 视频全屏时一并收走：播放器要占满物理屏幕。
+                    visible: _barVisible && !_videoFullscreen,
+                    canGoBack: _canGoBack,
+                    onBack: () => _controller?.goBack(),
+                    // 不是 reloadWithCurrentSettings：那个方法最后会 loadUrl
+                    // 到配置里的**首页** URL，绑在刷新上会把深层页面的用户扔
+                    // 回首页。刷新就是重载当前页。
+                    onReload: () => _controller?.reload(),
+                    onOpenSettings: widget.onOpenSettings,
+                    onMore: _openMore,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
