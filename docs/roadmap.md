@@ -25,13 +25,16 @@
 - **页内查找**
   `flutter_inappwebview` 自带 `findAll()` / `findNext()`，底部栏加入口就行。长文站点实用。
 
-- **调研 Google 登录的对接**
-  Google 从 2021 年起禁止在嵌入式 WebView 里跑 OAuth，壳里点「用 Google 登录」会直接吃
-  `403 disallowed_useragent`。一批站点（论坛、SaaS）的登录路径因此在壳内是死的。
-  调研两条路：(1) 把授权页丢给系统浏览器 / Android Custom Tabs（`flutter_web_auth_2` 或
-  `url_launcher`），回调走 deep link——难点是 Custom Tabs 和 WebView 在 Android 上**不共享
-  cookie**，登录态怎么回灌进 WebView 是关键；(2) 改 UA 伪装成 Chrome，成本低但 Google 有检测，
-  未必稳。先做可行性验证，再决定要不要做。
+- **用外部浏览器打开当前页**
+  壳里做不了的事总有几件：Google 登录在 embedded WebView 里被直接拒（调研见
+  [`google_account_login_research.md`](./google_account_login_research.md)）、某些下载和
+  支付跳转、以及排查「到底是壳的问题还是站点的问题」时想拿真浏览器对一眼。
+  `url_launcher` 的 `launchUrl(mode: LaunchMode.externalApplication)` 一行的事，入口进
+  底部栏的「更多」菜单，和「复制当前 URL」那条挨着做正好。
+
+  说明白一件事：**登录态带不过去**（壳和系统浏览器不共享 cookie），所以它是逃生口，
+  不是常规路径。和 `safeDomains` 那条的区别也在这儿——那个是外域自动丢出去，这个是
+  用户对当前页主动这么做。
 
 ## 以后
 
@@ -81,16 +84,6 @@
   已知难点：直链多半带防盗链，得把 WebView 的 cookie、UA、Referer 一起带给播放器；
   加密流（DRM、自定义 key）嗅到了也放不了，要能干净地退回网页播放器而不是卡在黑屏。
 
-- **用外部浏览器打开当前页**
-  壳里做不了的事总有几件：Google 登录在 embedded WebView 里被直接拒（见近期那条调研）、
-  某些下载和支付跳转、以及排查「到底是壳的问题还是站点的问题」时想拿真浏览器对一眼。
-  `url_launcher` 的 `launchUrl(mode: LaunchMode.externalApplication)` 一行的事，入口进
-  底部栏的「更多」菜单，和「复制当前 URL」那条挨着做正好。
-
-  说明白一件事：**登录态带不过去**（壳和系统浏览器不共享 cookie），所以它是逃生口，
-  不是常规路径。和 `safeDomains` 那条的区别也在这儿——那个是外域自动丢出去，这个是
-  用户对当前页主动这么做。
-
 ## 不做
 
 - 系统托盘、关窗隐藏、全局快捷键、多窗口/多实例、多架构 —— 桌面概念，移动端不成立。
@@ -127,3 +120,10 @@
   README「预构建 App」一节给 4KVM / DADATU / YouTube 各配一张真机截图，由
   `app-screenshot` skill 从最新正式版 APK 一键截图、缩放后存 `docs/images/`。
   落地过程见 [`develop_log.md`](./develop_log.md)。
+
+- **调研 Google 登录的对接**（2026-09-05）
+  结论：Google 对嵌入式 WebView 分两套拦截——OAuth 授权端点是硬拦截（必然拒绝），
+  普通登录页是风控启发式（改 UA 只是绕过、不稳）；Custom Tabs 能拿到 API token 但
+  换不来 WebView 里的「已登录」。落地方向是「用外部浏览器打开当前页」当逃生口，并
+  把注入脚本限定到站点自己的 origin（不沾登录页）。
+  完整调研见 [`google_account_login_research.md`](./google_account_login_research.md)。
