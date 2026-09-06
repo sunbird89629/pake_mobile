@@ -552,3 +552,41 @@ README 版本号，八步漏一步就出废图，而且版本每次 bump 都要�
 README 进了 5 张图：预设 app ×3（4KVM / DADATU / YouTube，一行并排）、
 图案锁、Run workflow 表单。三个预设 app 各自从最新正式版 APK 截出，
 截图内容与表格「干什么」的描述对得上。
+
+## 内置去广告样式注入
+
+roadmap 里的「去广告」写的是「加一个内置 `adblock.css` 即可」，真做起来
+确实就一件事：写 CSS。注入脚本体系、`enabledScripts` 开关、设置页 toggle
+全是现成的，`adblock.css` 一进 `injectScripts` 就物化成 id `adblock`，
+默认全开、误伤了随时关——零改动衔接。
+
+### 宁漏勿误，不碰 YouTube
+
+CSS 拦不了 YouTube 的视频前贴片（那是播放器里插的，不是页面上的广告节点），
+硬套通用广告选择器反而可能把 YouTube 的正常布局一起藏了。所以 `adblock.css`
+只接 4kvm / dadatu 两个影视站，选择器也收得很窄：`ad-`/`ads-` 前缀、
+`-ad-`/`_ad_` 包裹、`advert`、广告网络 iframe、悬浮/贴片位，最弱的
+`#ad`/`.ad` 放最后。宁可漏杀，不误杀——广告没藏掉是体验问题，正常内容被
+藏了用户只会卸载。
+
+### CI 的路径坑：build 不在仓库根跑
+
+preset 里 `injectScripts: ["presets/adblock.css"]` 是相对仓库根的路径，但
+`build-presets.yml` 的 build 步骤 `working-directory` 在 `packages/pake_cli`，
+`validateConfig` 和物化都按 cwd 解析，相对路径会找错地方。解法是矩阵投影里
+带上 `injectScripts`，build 步骤前缀 `$GITHUB_WORKSPACE` 换成绝对路径再交给
+`--inject`——不把 build 挪出 `packages/pake_cli`，改动最小。
+
+### 预设校验提前到单测
+
+`presets/*.json` 在 pake_cli 的上级目录，`dart test` 从不把它当代码走一遍，
+路径写错、脚本 id 撞车、json 拼错都只会在 build-presets 真跑时炸，反馈太晚。
+`pake_cli/test/presets_test.dart` 把「name/url/bundleId 齐全、脚本路径存在且
+非空、id 不撞车」提到单测，坏掉在 PR 阶段就拦下。
+
+### 验证
+
+`dart analyze` 无告警；pake_cli 全量 170 项通过（含新增 7 项预设校验）。
+真实物化 dry-run：`presets/adblock.css` 走 `materializeScriptsInto` 后
+`index.json` 里是 `{id: adblock, kind: css}`，注入为 `<style>`；`4kvm` /
+`dadatu` 两个预设的 `defaultEnabledScripts` 都含 `adblock`。
