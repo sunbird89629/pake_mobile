@@ -3,5 +3,6 @@
   "url": "https://www.4kvm.site/",
   "bundleId": "com.pake.fourkvm",
   "version": "0.2.0",
-  "description": "4K 高清影视，电影美剧日更，打开即看。"
+  "description": "4K 高清影视，电影美剧日更，打开即看。",
+  "injectScripts": ["presets/adblock.css"]
 }
