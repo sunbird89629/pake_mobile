@@ -19,9 +19,6 @@
   刷新 = reload，深逛之后想回入口只能手动。两条都进底部栏的「更多」菜单（分享那条已经把
   菜单和「读当前页 URL」都做出来了，这里是往里加行）。
 
-- **去广告样式注入**
-  已有注入脚本体系，加一个内置 `adblock.css` 即可，和现有 `enabledScripts` 开关无缝衔接。
-
 - **页内查找**
   `flutter_inappwebview` 自带 `findAll()` / `findNext()`，底部栏加入口就行。长文站点实用。
 
@@ -127,3 +124,10 @@
   换不来 WebView 里的「已登录」。落地方向是「用外部浏览器打开当前页」当逃生口，并
   把注入脚本限定到站点自己的 origin（不沾登录页）。
   完整调研见 [`google_account_login_research.md`](./google_account_login_research.md)。
+
+- **去广告样式注入**（2026-09-06）
+  新增内置 `presets/adblock.css`——按常见广告容器的命名规律整段隐藏（`ad-`/`ads-` 前缀、
+  `-ad-`/`_ad_` 包裹、`advert`、广告网络 iframe、悬浮/贴片位、`#ad`/`.ad`），原则
+  宁漏勿误。接入 4kvm / dadatu 两个影视站预设，走现有 `enabledScripts` 开关无缝衔接
+  （默认开、可在设置页关）；YouTube 不接——视频前贴片 CSS 挡不住，硬上反而可能误伤
+  布局。落地过程见 [`develop_log.md`](./develop_log.md)。
