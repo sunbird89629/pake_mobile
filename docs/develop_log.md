@@ -509,3 +509,46 @@ Android 上标题本该走 `EXTRA_SUBJECT`（Chrome 就是这么发的），但�
 
 `--description` 走的是现有的 `PakeFlags` / `mergeConfig` 通道（pake.json →
 壳的 `buildTime`），和 name、version 一个待遇，没有为它单开一条路径。
+
+## 预设 app 的真机截图进 README
+
+README「预构建 App」那节最早是三行表格，没有图。表格写得出「干什么」，
+写不出「装完长什么样」——对还没装的人来说，一张真机截图比「4K 高清影视」
+五个字有说服力得多。
+
+### 截的是「当前正式版」，不是手机里躺着的那份
+
+版本 bump 后旧图就失真了：表格链到 `fourkvm-v0.2.0`，图还是 v0.1.0 的
+首屏，两边对不上，比没图更糟。所以流程第一步是下载最新正式版 APK
+（`gh release download <tag> --pattern '*arm64-v8a*'`）重新装到真机，
+而不是直接截手机上已经装着的旧包。
+
+这事值得固化成 skill：查 tag、下载、装、等加载、截、验证、缩放、核对
+README 版本号，八步漏一步就出废图，而且版本每次 bump 都要重来一遍。
+`.claude/skills/app-screenshot/` 把它写成可触发的话术，以后喊一句
+「更新 README 里的截图」就跑完。
+
+### 真机 + 缩到 400px
+
+真机才截得出真实形态——模拟器的分辨率、字体、WebView 渲染都和 Pixel 有
+差。固定用 Pixel（`39111FDJH00D47`），无线别名 `_adb-tls-connect` 结尾的
+一律不用。
+
+不存全尺寸：手机截图 1080×2400，放 README 一张就占一屏，三个 app 三屏
+没人往下翻。`sips --resampleWidth 400` 缩到 400px 宽，三个 app 一行并排
+刚好。
+
+### 两个「停下等人」而不是硬扛的地方
+
+- **锁屏就停**，让用户解锁，绝不猜 PIN——之前有过设备锁屏导致截屏全黑。
+- **临时区只放 `/tmp/app-screenshot/`**，不碰 `~/.pake/out/`——那下面的
+  构建产物用户明确说过不清。
+
+截完每张图先验证非空白（`sips` 看像素，几 KB 或纯色就是没截好），再
+同名覆盖 `docs/images/<slug>.png`——README 里已引用的 markdown 不用动。
+
+### 验证
+
+README 进了 5 张图：预设 app ×3（4KVM / DADATU / YouTube，一行并排）、
+图案锁、Run workflow 表单。三个预设 app 各自从最新正式版 APK 截出，
+截图内容与表格「干什么」的描述对得上。
