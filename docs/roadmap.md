@@ -8,12 +8,16 @@
 
 ## 近期
 
-- **深链与下载分流**（原 `safeDomains` 窄化）
+- **深链分流**
   普通 http/https 导航一律壳内开——单站壳「主站跳到源站」必须留在壳内，cookie 和上下文才
-  连续，不为分流而分流。只拦两类确凿开不好的：非 http(s) scheme 的深链（`taobao://`、
-  `alipays://`、`intent://`）在 `shouldOverrideUrlLoading` 里看 `uri.scheme` 丢系统；
-  下载在 `onDownloadStartRequest` 丢浏览器/下载管理器。被 WebView 拒的登录页走
-  「用外部浏览器打开当前页」那条逃生口，不在这里重复。
+  连续，不为分流而分流。只拦非 http(s) scheme 的深链（`taobao://`、`alipays://`、
+  `intent://`）：在 `shouldOverrideUrlLoading` 里看 `uri.scheme`，是深链就 `launchUrl`
+  丢给系统。被 WebView 拒的登录页走「用外部浏览器打开当前页」那条逃生口，不在这里重复。
+
+- **网页文件下载分流**
+  站点自己触发的下载（点「下载 App」下 APK、PDF 之类）走 `onDownloadStartRequest`，单站
+  壳没有地方承接，直接丢浏览器/下载管理器。和「视频下载」不是一回事——那条是我们主动
+  嗅探视频落盘，这条是网页发起的文件下载被转发出去。
 
 - **为预设 App 添加介绍视频**
   给每个预设 App 配一段介绍视频 URL（或本地路径），在 App 详情页或应用市场页展示。
