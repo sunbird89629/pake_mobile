@@ -1,0 +1,7 @@
+{
+  "name": "X",
+  "url": "https://x.com/",
+  "bundleId": "com.pake.x",
+  "version": "0.1.0",
+  "description": "X 网页版，关注实时动态，装成独立的 App，打开即用。"
+}

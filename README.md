@@ -29,6 +29,7 @@
 | 4KVM | 4K 高清影视，电影美剧日更，打开即看 | [fourkvm-v0.2.0](https://github.com/sunbird89629/pake_mobile/releases/tag/fourkvm-v0.2.0) |
 | DADATU（哒哒兔） | 电影、综艺、动漫在线观看 | [dadatu-v0.2.0](https://github.com/sunbird89629/pake_mobile/releases/tag/dadatu-v0.2.0) |
 | YouTube | 网页版装成独立的 App，打开即用 | [youtube-v0.2.0](https://github.com/sunbird89629/pake_mobile/releases/tag/youtube-v0.2.0) |
+| X | 浏览 x.com，关注实时动态 | 已添加预设，待首次构建发布 |
 
 ![4KVM](docs/images/fourkvm.png) ![DADATU](docs/images/dadatu.png) ![YouTube](docs/images/youtube.png)
 
